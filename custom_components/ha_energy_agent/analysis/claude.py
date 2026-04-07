@@ -24,10 +24,15 @@ class ClaudeAnalysisClient:
     """Thin async wrapper around the Anthropic Python SDK."""
 
     def __init__(self, api_key: str, model: str) -> None:
-        import anthropic
-
+        self._api_key = api_key
         self._model = model
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
+        self._client = None  # created lazily on first call to avoid blocking the event loop
+
+    def _get_client(self):
+        if self._client is None:
+            import anthropic
+            self._client = anthropic.AsyncAnthropic(api_key=self._api_key)
+        return self._client
 
     async def analyse(
         self,
@@ -40,7 +45,7 @@ class ClaudeAnalysisClient:
 
         _LOGGER.debug("Sending %d chars to Claude (%s)", len(user_message), self._model)
 
-        response = await self._client.messages.create(
+        response = await self._get_client().messages.create(
             model=self._model,
             max_tokens=_MAX_TOKENS,
             system=SYSTEM_PROMPT,

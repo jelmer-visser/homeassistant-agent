@@ -30,10 +30,15 @@ class OpenAIAnalysisClient:
     """Thin async wrapper around the OpenAI Python SDK."""
 
     def __init__(self, api_key: str, model: str) -> None:
-        import openai
-
+        self._api_key = api_key
         self._model = model
-        self._client = openai.AsyncOpenAI(api_key=api_key)
+        self._client = None  # created lazily on first call to avoid blocking the event loop
+
+    def _get_client(self):
+        if self._client is None:
+            import openai
+            self._client = openai.AsyncOpenAI(api_key=self._api_key)
+        return self._client
 
     async def analyse(
         self,
@@ -59,7 +64,7 @@ class OpenAIAnalysisClient:
         if not _is_reasoning_model(self._model):
             kwargs["response_format"] = {"type": "json_object"}
 
-        response = await self._client.chat.completions.create(**kwargs)
+        response = await self._get_client().chat.completions.create(**kwargs)
 
         raw_text: str = response.choices[0].message.content or ""
         _LOGGER.debug("Received %d chars from OpenAI", len(raw_text))
