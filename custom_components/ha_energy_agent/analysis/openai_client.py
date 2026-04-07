@@ -32,12 +32,17 @@ class OpenAIAnalysisClient:
     def __init__(self, api_key: str, model: str) -> None:
         self._api_key = api_key
         self._model = model
-        self._client = None  # created lazily on first call to avoid blocking the event loop
+        self._client = None
 
-    def _get_client(self):
+    def _create_client(self):
+        import openai
+        return openai.AsyncOpenAI(api_key=self._api_key)
+
+    async def _get_client(self):
         if self._client is None:
-            import openai
-            self._client = openai.AsyncOpenAI(api_key=self._api_key)
+            import asyncio
+            loop = asyncio.get_running_loop()
+            self._client = await loop.run_in_executor(None, self._create_client)
         return self._client
 
     async def analyse(
@@ -64,7 +69,8 @@ class OpenAIAnalysisClient:
         if not _is_reasoning_model(self._model):
             kwargs["response_format"] = {"type": "json_object"}
 
-        response = await self._get_client().chat.completions.create(**kwargs)
+        client = await self._get_client()
+        response = await client.chat.completions.create(**kwargs)
 
         raw_text: str = response.choices[0].message.content or ""
         _LOGGER.debug("Received %d chars from OpenAI", len(raw_text))

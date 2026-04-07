@@ -26,12 +26,17 @@ class ClaudeAnalysisClient:
     def __init__(self, api_key: str, model: str) -> None:
         self._api_key = api_key
         self._model = model
-        self._client = None  # created lazily on first call to avoid blocking the event loop
+        self._client = None
 
-    def _get_client(self):
+    def _create_client(self):
+        import anthropic
+        return anthropic.AsyncAnthropic(api_key=self._api_key)
+
+    async def _get_client(self):
         if self._client is None:
-            import anthropic
-            self._client = anthropic.AsyncAnthropic(api_key=self._api_key)
+            import asyncio
+            loop = asyncio.get_running_loop()
+            self._client = await loop.run_in_executor(None, self._create_client)
         return self._client
 
     async def analyse(
@@ -45,7 +50,8 @@ class ClaudeAnalysisClient:
 
         _LOGGER.debug("Sending %d chars to Claude (%s)", len(user_message), self._model)
 
-        response = await self._get_client().messages.create(
+        client = await self._get_client()
+        response = await client.messages.create(
             model=self._model,
             max_tokens=_MAX_TOKENS,
             system=SYSTEM_PROMPT,
