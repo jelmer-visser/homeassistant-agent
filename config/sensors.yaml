@@ -1,0 +1,630 @@
+# Home Assistant sensor definitions for the energy optimization agent.
+# Pre-populated with Jelmer's confirmed entity IDs from live HA scan.
+#
+# Fields per sensor:
+#   entity_id   - HA entity ID (required)
+#   name        - human-readable name for prompts (required)
+#   unit        - unit of measurement (optional)
+#   role        - semantic role: power, energy, soc, temperature, binary, mode, price, etc.
+#   group       - group label this sensor belongs to (informational)
+#   is_binary   - true for binary_sensor.* entities
+
+groups:
+
+  # -------------------------------------------------------------------------
+  - label: grid
+    sensors:
+      - entity_id: sensor.p1_meter_power
+        name: Grid power (+ import / – export)
+        unit: W
+        role: power
+        group: grid
+
+      - entity_id: sensor.p1_meter_power_phase_1
+        name: Grid phase 1 power
+        unit: W
+        role: power
+        group: grid
+
+      - entity_id: sensor.p1_meter_power_phase_2
+        name: Grid phase 2 power
+        unit: W
+        role: power
+        group: grid
+
+      - entity_id: sensor.p1_meter_power_phase_3
+        name: Grid phase 3 power
+        unit: W
+        role: power
+        group: grid
+
+      - entity_id: sensor.p1_meter_energy_import
+        name: Grid energy import total
+        unit: kWh
+        role: energy
+        group: grid
+
+      - entity_id: sensor.p1_meter_energy_export
+        name: Grid energy export total
+        unit: kWh
+        role: energy
+        group: grid
+
+      - entity_id: sensor.netstroom_import_vandaag
+        name: Grid import today
+        unit: kWh
+        role: energy
+        group: grid
+
+      - entity_id: sensor.netstroom_export_vandaag
+        name: Grid export today
+        unit: kWh
+        role: energy
+        group: grid
+
+      - entity_id: sensor.p1_meter_tariff
+        name: Current tariff period (1=night, 2=day)
+        unit: ""
+        role: mode
+        group: grid
+
+  # -------------------------------------------------------------------------
+  - label: solar
+    sensors:
+      - entity_id: sensor.opendtu_07869c_ac_power
+        name: Solar total AC power (OpenDTU)
+        unit: W
+        role: power
+        group: solar
+
+      - entity_id: sensor.opendtu_07869c_dc_power
+        name: Solar total DC power (OpenDTU)
+        unit: W
+        role: power
+        group: solar
+
+      - entity_id: sensor.opendtu_07869c_yield_day
+        name: Solar yield today (OpenDTU)
+        unit: Wh
+        role: energy
+        group: solar
+
+      - entity_id: sensor.opendtu_07869c_yield_total
+        name: Solar yield total (OpenDTU)
+        unit: kWh
+        role: energy
+        group: solar
+
+      - entity_id: sensor.hms_1600_4t_1_power
+        name: Inverter 1 power (HMS-1600-4T #1)
+        unit: W
+        role: power
+        group: solar
+
+      - entity_id: sensor.hms_1600_4t_2_power
+        name: Inverter 2 power (HMS-1600-4T #2)
+        unit: W
+        role: power
+        group: solar
+
+      - entity_id: sensor.hms_800_2t_1_power
+        name: Inverter 3 power (HMS-800-2T)
+        unit: W
+        role: power
+        group: solar
+
+      - entity_id: sensor.hms_1600_4t_1_yieldday
+        name: Inverter 1 yield today
+        unit: Wh
+        role: energy
+        group: solar
+
+      - entity_id: sensor.hms_1600_4t_2_yieldday
+        name: Inverter 2 yield today
+        unit: Wh
+        role: energy
+        group: solar
+
+      - entity_id: sensor.hms_800_2t_1_yieldday
+        name: Inverter 3 yield today
+        unit: Wh
+        role: energy
+        group: solar
+
+      - entity_id: sensor.solcast_pv_forecast_power_now
+        name: Solcast forecast power now
+        unit: W
+        role: power
+        group: solar
+
+      - entity_id: sensor.solcast_pv_forecast_forecast_today
+        name: Solcast forecast total today
+        unit: kWh
+        role: energy
+        group: solar
+
+      - entity_id: sensor.solcast_pv_forecast_forecast_tomorrow
+        name: Solcast forecast total tomorrow
+        unit: kWh
+        role: energy
+        group: solar
+
+      - entity_id: sensor.solcast_pv_forecast_forecast_remaining_today
+        name: Solcast remaining forecast today
+        unit: kWh
+        role: energy
+        group: solar
+
+      - entity_id: sensor.solcast_pv_forecast_peak_time_today
+        name: Solcast peak time today
+        unit: ""
+        role: mode
+        group: solar
+
+  # -------------------------------------------------------------------------
+  - label: battery
+    sensors:
+      - entity_id: sensor.zendure_2400_ac_laadpercentage
+        name: Battery combined SoC
+        unit: "%"
+        role: soc
+        group: battery
+
+      - entity_id: sensor.zendure_2400_ac_totale_capaciteit
+        name: Battery total capacity
+        unit: kWh
+        role: energy
+        group: battery
+
+      - entity_id: sensor.zendure_2400_ac_indicatie_beschikbare_energie
+        name: Battery available energy
+        unit: kWh
+        role: energy
+        group: battery
+
+      - entity_id: sensor.zendure_2400_ac_vermogen_export
+        name: Battery export power (discharging to home)
+        unit: W
+        role: power
+        group: battery
+
+      - entity_id: sensor.zendure_2400_ac_vermogen_import
+        name: Battery import power (charging from grid/solar)
+        unit: W
+        role: power
+        group: battery
+
+      - entity_id: sensor.zendure_2400_ac_modus
+        name: Battery mode
+        unit: ""
+        role: mode
+        group: battery
+
+      - entity_id: sensor.zendure_2400_ac_relais_stand
+        name: Battery relay state
+        unit: ""
+        role: mode
+        group: battery
+
+      - entity_id: sensor.zendure_2400_ac_rte_totaal
+        name: Battery RTE (round-trip efficiency total)
+        unit: "%"
+        role: efficiency
+        group: battery
+
+      - entity_id: sensor.zendure_2400_ac_efficientie_export_24u_gemiddelde
+        name: Battery export efficiency 24h avg
+        unit: "%"
+        role: efficiency
+        group: battery
+
+      - entity_id: sensor.zendure_2400_ac_efficientie_import_24u_gemiddelde
+        name: Battery import efficiency 24h avg
+        unit: "%"
+        role: efficiency
+        group: battery
+
+      - entity_id: sensor.zendure_2400_ac_relais_schakelingen_totaal_vandaag
+        name: Battery relay switches today
+        unit: count
+        role: counter
+        group: battery
+
+      - entity_id: sensor.sf2400ac_788_electric_level
+        name: Battery unit 1 SoC (SF2400AC #788)
+        unit: "%"
+        role: soc
+        group: battery
+
+      - entity_id: sensor.sf2400ac_788_bat_in_out
+        name: Battery unit 1 charge/discharge power
+        unit: W
+        role: power
+        group: battery
+
+      - entity_id: sensor.sf2400ac_788_output_home_power
+        name: Battery unit 1 output to home
+        unit: W
+        role: power
+        group: battery
+
+      - entity_id: sensor.sf2400ac_788_grid_input_power
+        name: Battery unit 1 grid input power
+        unit: W
+        role: power
+        group: battery
+
+      - entity_id: sensor.sf2400ac_967_electric_level
+        name: Battery unit 2 SoC (SF2400AC #967)
+        unit: "%"
+        role: soc
+        group: battery
+
+      - entity_id: sensor.sf2400ac_967_bat_in_out
+        name: Battery unit 2 charge/discharge power
+        unit: W
+        role: power
+        group: battery
+
+      # Battery pack SoC sensors (6× AB3000)
+      - entity_id: sensor.ab3000_269_soc_level
+        name: Battery pack 1 SoC (AB3000 #269)
+        unit: "%"
+        role: soc
+        group: battery
+
+      - entity_id: sensor.ab3000_601_soc_level
+        name: Battery pack 2 SoC (AB3000 #601)
+        unit: "%"
+        role: soc
+        group: battery
+
+      - entity_id: sensor.ab3000_658_soc_level
+        name: Battery pack 3 SoC (AB3000 #658)
+        unit: "%"
+        role: soc
+        group: battery
+
+      - entity_id: sensor.ab3000_873_soc_level
+        name: Battery pack 4 SoC (AB3000 #873)
+        unit: "%"
+        role: soc
+        group: battery
+
+      - entity_id: sensor.ab3000_938_soc_level
+        name: Battery pack 5 SoC (AB3000 #938)
+        unit: "%"
+        role: soc
+        group: battery
+
+      - entity_id: sensor.ab3000_958_soc_level
+        name: Battery pack 6 SoC (AB3000 #958)
+        unit: "%"
+        role: soc
+        group: battery
+
+      # Battery pack temperatures
+      - entity_id: sensor.ab3000_269_max_temp
+        name: Battery pack 1 max temperature
+        unit: "°C"
+        role: temperature
+        group: battery
+
+      - entity_id: sensor.ab3000_601_max_temp
+        name: Battery pack 2 max temperature
+        unit: "°C"
+        role: temperature
+        group: battery
+
+      - entity_id: sensor.ab3000_658_max_temp
+        name: Battery pack 3 max temperature
+        unit: "°C"
+        role: temperature
+        group: battery
+
+      - entity_id: sensor.ab3000_873_max_temp
+        name: Battery pack 4 max temperature
+        unit: "°C"
+        role: temperature
+        group: battery
+
+      - entity_id: sensor.ab3000_938_max_temp
+        name: Battery pack 5 max temperature
+        unit: "°C"
+        role: temperature
+        group: battery
+
+      - entity_id: sensor.ab3000_958_max_temp
+        name: Battery pack 6 max temperature
+        unit: "°C"
+        role: temperature
+        group: battery
+
+  # -------------------------------------------------------------------------
+  - label: heat_pump
+    sensors:
+      - entity_id: binary_sensor.heatpump_1_on
+        name: Heat pump 1 on/off
+        unit: ""
+        role: binary
+        group: heat_pump
+        is_binary: true
+
+      - entity_id: binary_sensor.heatpump_2_on
+        name: Heat pump 2 on/off
+        unit: ""
+        role: binary
+        group: heat_pump
+        is_binary: true
+
+      - entity_id: sensor.heatpump_1_electrical_power
+        name: Heat pump 1 electrical power
+        unit: W
+        role: power
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_2_electrical_power
+        name: Heat pump 2 electrical power
+        unit: W
+        role: power
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_hp1_power
+        name: Heat pump 1 heat output
+        unit: W
+        role: power
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_hp2_power
+        name: Heat pump 2 heat output
+        unit: W
+        role: power
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_heat_power
+        name: Heat pump total heat output
+        unit: W
+        role: power
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_total_power_input
+        name: Heat pump total electrical input
+        unit: W
+        role: power
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_cop
+        name: Heat pump combined COP
+        unit: ""
+        role: efficiency
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_hp1_quatt_cop
+        name: Heat pump 1 COP (Quatt)
+        unit: ""
+        role: efficiency
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_hp2_quatt_cop
+        name: Heat pump 2 COP (Quatt)
+        unit: ""
+        role: efficiency
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_flowmeter_flowrate
+        name: Heat pump water flow rate
+        unit: L/h
+        role: flow
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_total_water_delta
+        name: Heat pump water delta T
+        unit: "°C"
+        role: temperature
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_hp1_temperature_water_in
+        name: Heat pump 1 water in temperature
+        unit: "°C"
+        role: temperature
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_hp1_temperature_water_out
+        name: Heat pump 1 water out temperature
+        unit: "°C"
+        role: temperature
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_boiler_temperature_water_inlet
+        name: Boiler water inlet temperature
+        unit: "°C"
+        role: temperature
+        group: heat_pump
+
+      - entity_id: binary_sensor.heatpump_boiler_flame
+        name: Boiler flame active
+        unit: ""
+        role: binary
+        group: heat_pump
+        is_binary: true
+
+      - entity_id: binary_sensor.heatpump_thermostat_domestic_hot_water
+        name: DHW (domestic hot water) active
+        unit: ""
+        role: binary
+        group: heat_pump
+        is_binary: true
+
+      - entity_id: binary_sensor.heatpump_thermostat_heating
+        name: Space heating active
+        unit: ""
+        role: binary
+        group: heat_pump
+        is_binary: true
+
+      - entity_id: sensor.heatpump_thermostat_room_setpoint
+        name: Room temperature setpoint
+        unit: "°C"
+        role: temperature
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_thermostat_room_temperature
+        name: Room temperature (thermostat)
+        unit: "°C"
+        role: temperature
+        group: heat_pump
+
+      - entity_id: sensor.heatpump_thermostat_control_setpoint
+        name: Heat pump control setpoint
+        unit: "°C"
+        role: temperature
+        group: heat_pump
+
+      - entity_id: binary_sensor.heatpump_hp1_defrost
+        name: Heat pump 1 defrost active
+        unit: ""
+        role: binary
+        group: heat_pump
+        is_binary: true
+
+      - entity_id: binary_sensor.heatpump_hp1_limited_by_cop
+        name: Heat pump 1 limited by COP guard
+        unit: ""
+        role: binary
+        group: heat_pump
+        is_binary: true
+
+      - entity_id: sensor.heatpump_qc_supervisory_control_mode
+        name: Heat pump supervisory control mode
+        unit: ""
+        role: mode
+        group: heat_pump
+
+      - entity_id: sensor.insights_average_cop
+        name: Heat pump average COP (lifetime)
+        unit: ""
+        role: efficiency
+        group: heat_pump
+
+      - entity_id: sensor.insights_total_heat_pump_electric
+        name: Heat pump total electricity used (lifetime)
+        unit: Wh
+        role: energy
+        group: heat_pump
+
+      - entity_id: sensor.insights_total_heat_pump_heat
+        name: Heat pump total heat produced (lifetime)
+        unit: Wh
+        role: energy
+        group: heat_pump
+
+  # -------------------------------------------------------------------------
+  - label: temperature
+    sensors:
+      - entity_id: sensor.buitenmeter_25_temperature
+        name: Outdoor temperature (Aqara Buitenmeter)
+        unit: "°C"
+        role: temperature
+        group: temperature
+
+      - entity_id: sensor.buitenmeter_25_humidity
+        name: Outdoor humidity
+        unit: "%"
+        role: humidity
+        group: temperature
+
+      - entity_id: sensor.thermostaat_thermostat_indoor_temperature
+        name: Indoor temperature (woonkamer thermostat)
+        unit: "°C"
+        role: temperature
+        group: temperature
+
+      - entity_id: sensor.meter_pro_co2_monitor_f5_temperature
+        name: Indoor temperature (CO2 monitor)
+        unit: "°C"
+        role: temperature
+        group: temperature
+
+      - entity_id: sensor.meter_pro_5f_temperature
+        name: Office temperature
+        unit: "°C"
+        role: temperature
+        group: temperature
+
+      - entity_id: sensor.meter_pro_co2_monitor_f5_carbon_dioxide
+        name: Indoor CO2 level
+        unit: ppm
+        role: air_quality
+        group: temperature
+
+  # -------------------------------------------------------------------------
+  - label: pricing
+    sensors:
+      - entity_id: sensor.nordpool_kwh_nl_eur_3_10_021
+        name: Nord Pool spot price NL
+        unit: €/kWh
+        role: price
+        group: pricing
+
+      - entity_id: sensor.cic_day_electricity_price
+        name: Fixed day electricity tariff
+        unit: €/kWh
+        role: price
+        group: pricing
+
+      - entity_id: sensor.cic_night_electricity_price
+        name: Fixed night electricity tariff
+        unit: €/kWh
+        role: price
+        group: pricing
+
+      - entity_id: sensor.cic_gas_price
+        name: Gas tariff
+        unit: €/m³
+        role: price
+        group: pricing
+
+      - entity_id: sensor.electricity_maps_co2_intensity
+        name: Grid CO2 intensity
+        unit: gCO2eq/kWh
+        role: co2
+        group: pricing
+
+  # -------------------------------------------------------------------------
+  - label: appliances
+    sensors:
+      - entity_id: sensor.koelvries_keuken_current_consumption
+        name: Fridge-freezer (kitchen) power
+        unit: W
+        role: power
+        group: appliances
+
+      - entity_id: sensor.tv_kast_current_consumption
+        name: TV cabinet power
+        unit: W
+        role: power
+        group: appliances
+
+      - entity_id: sensor.server_current_consumption
+        name: Server power
+        unit: W
+        role: power
+        group: appliances
+
+      - entity_id: sensor.bureau_apparaten_current_consumption
+        name: Office devices power
+        unit: W
+        role: power
+        group: appliances
+
+      - entity_id: sensor.droger_power
+        name: Dryer power
+        unit: W
+        role: power
+        group: appliances
+
+      - entity_id: sensor.vaatwasser_current_consumption
+        name: Dishwasher power
+        unit: W
+        role: power
+        group: appliances
