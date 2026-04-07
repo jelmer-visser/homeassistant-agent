@@ -150,6 +150,7 @@ class EnergyAgentCoordinator(DataUpdateCoordinator[AgentCycleResult]):
                 bundles, pricing, history_hours
             )
         except Exception as exc:
+            _LOGGER.error("AI analysis failed: %s: %s", type(exc).__name__, exc)
             completed_at = datetime.now(timezone.utc)
             return AgentCycleResult(
                 started_at=started_at,
