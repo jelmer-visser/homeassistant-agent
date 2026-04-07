@@ -2,10 +2,11 @@
   "config": {
     "step": {
       "user": {
-        "title": "HA Energy Agent — API Key",
-        "description": "Enter your Anthropic API key. You can create one at https://console.anthropic.com.",
+        "title": "HA Energy Agent — AI Provider",
+        "description": "Select your AI provider and enter the corresponding API key.",
         "data": {
-          "anthropic_api_key": "Anthropic API Key"
+          "ai_provider": "AI Provider",
+          "ai_api_key": "API Key"
         }
       },
       "discover": {
@@ -27,6 +28,7 @@
       "settings": {
         "title": "Analysis settings",
         "data": {
+          "ai_model": "AI Model",
           "interval_minutes": "Analysis interval",
           "history_hours": "History window",
           "tariff_type": "Electricity tariff type",
@@ -38,7 +40,8 @@
       }
     },
     "error": {
-      "invalid_api_key": "API key must start with 'sk-ant-'. Please check and try again."
+      "invalid_anthropic_key": "Anthropic API key must start with 'sk-ant-'. Please check and try again.",
+      "invalid_openai_key": "OpenAI API key must start with 'sk-'. Please check and try again."
     }
   },
   "options": {
@@ -68,6 +71,7 @@
       "settings": {
         "title": "Update analysis settings",
         "data": {
+          "ai_model": "AI Model",
           "interval_minutes": "Analysis interval",
           "history_hours": "History window",
           "tariff_type": "Electricity tariff type",
@@ -104,6 +108,23 @@
       "options": {
         "settings": "Change settings",
         "rediscover": "Re-discover entities"
+      }
+    },
+    "ai_provider": {
+      "options": {
+        "anthropic": "Anthropic (Claude)",
+        "openai": "OpenAI (ChatGPT)"
+      }
+    },
+    "ai_model": {
+      "options": {
+        "claude-haiku-4-5-20251001": "Claude Haiku 4.5 (fastest, cheapest)",
+        "claude-sonnet-4-6": "Claude Sonnet 4.6 (recommended)",
+        "claude-opus-4-6": "Claude Opus 4.6 (most capable)",
+        "gpt-4o-mini": "GPT-4o mini (fastest, cheapest)",
+        "gpt-4o": "GPT-4o (recommended)",
+        "gpt-4.1": "GPT-4.1 (most capable)",
+        "o4-mini": "o4-mini (reasoning model)"
       }
     }
   },

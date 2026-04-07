@@ -17,16 +17,16 @@ from custom_components.ha_energy_agent.analysis.prompts import (
 
 _LOGGER = logging.getLogger(__name__)
 
-_MODEL = "claude-opus-4-6"
 _MAX_TOKENS = 4096
 
 
 class ClaudeAnalysisClient:
     """Thin async wrapper around the Anthropic Python SDK."""
 
-    def __init__(self, api_key: str) -> None:
+    def __init__(self, api_key: str, model: str) -> None:
         import anthropic
 
+        self._model = model
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
 
     async def analyse(
@@ -38,10 +38,10 @@ class ClaudeAnalysisClient:
         """Run one analysis cycle and return a validated AnalysisResult."""
         user_message = build_user_message(bundles, pricing, history_hours)
 
-        _LOGGER.debug("Sending %d chars to Claude", len(user_message))
+        _LOGGER.debug("Sending %d chars to Claude (%s)", len(user_message), self._model)
 
         response = await self._client.messages.create(
-            model=_MODEL,
+            model=self._model,
             max_tokens=_MAX_TOKENS,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],

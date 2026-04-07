@@ -4,7 +4,7 @@ Orchestrates the full analysis cycle:
   1. Rebuild SensorGroups from user-selected entities
   2. Fetch historical data from HA Recorder
   3. Build PricingContext from live state + options
-  4. Call Claude API
+  4. Call AI provider API
   5. Optionally push a persistent notification to HA
 """
 from __future__ import annotations
@@ -18,9 +18,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from custom_components.ha_energy_agent.analysis.base import AnalysisClient
 from custom_components.ha_energy_agent.analysis.claude import ClaudeAnalysisClient
+from custom_components.ha_energy_agent.analysis.openai_client import OpenAIAnalysisClient
 from custom_components.ha_energy_agent.const import (
+    CONF_AI_API_KEY,
+    CONF_AI_PROVIDER,
     CONF_ANTHROPIC_API_KEY,
+    DEFAULT_ANTHROPIC_MODEL,
     DEFAULT_FIXED_DAY_RATE,
     DEFAULT_FIXED_NIGHT_RATE,
     DEFAULT_HISTORY_HOURS,
@@ -30,6 +35,8 @@ from custom_components.ha_energy_agent.const import (
     DEFAULT_TARIFF_TYPE,
     DOMAIN,
     NOTIFICATION_ID,
+    DEFAULT_OPENAI_MODEL,
+    OPT_AI_MODEL,
     OPT_FIXED_DAY_RATE,
     OPT_FIXED_NIGHT_RATE,
     OPT_HISTORY_HOURS,
@@ -38,6 +45,8 @@ from custom_components.ha_energy_agent.const import (
     OPT_NOTIFY_HA,
     OPT_SELECTED_ENTITIES,
     OPT_TARIFF_TYPE,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_OPENAI,
 )
 from custom_components.ha_energy_agent.discovery import build_sensor_groups
 from custom_components.ha_energy_agent.models import (
@@ -48,6 +57,32 @@ from custom_components.ha_energy_agent.models import (
 from custom_components.ha_energy_agent.processing.history import fetch_history_bundles
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _build_ai_client(entry: ConfigEntry) -> AnalysisClient:
+    """Instantiate the right AI client from config entry data.
+
+    Handles backward compat: entries created before multi-provider support
+    only have CONF_ANTHROPIC_API_KEY in entry.data.
+    """
+    # Legacy entries
+    if CONF_AI_PROVIDER not in entry.data:
+        api_key = entry.data[CONF_ANTHROPIC_API_KEY]
+        model = entry.options.get(OPT_AI_MODEL, DEFAULT_ANTHROPIC_MODEL)
+        return ClaudeAnalysisClient(api_key=api_key, model=model)
+
+    provider = entry.data[CONF_AI_PROVIDER]
+    api_key = entry.data[CONF_AI_API_KEY]
+
+    if provider == PROVIDER_ANTHROPIC:
+        model = entry.options.get(OPT_AI_MODEL, DEFAULT_ANTHROPIC_MODEL)
+        return ClaudeAnalysisClient(api_key=api_key, model=model)
+
+    if provider == PROVIDER_OPENAI:
+        model = entry.options.get(OPT_AI_MODEL, DEFAULT_OPENAI_MODEL)
+        return OpenAIAnalysisClient(api_key=api_key, model=model)
+
+    raise ValueError(f"Unknown AI provider: {provider!r}")
 
 
 class EnergyAgentCoordinator(DataUpdateCoordinator[AgentCycleResult]):
@@ -62,8 +97,7 @@ class EnergyAgentCoordinator(DataUpdateCoordinator[AgentCycleResult]):
             name=DOMAIN,
             update_interval=timedelta(minutes=interval_minutes),
         )
-        api_key: str = entry.data[CONF_ANTHROPIC_API_KEY]
-        self._claude = ClaudeAnalysisClient(api_key)
+        self._ai_client: AnalysisClient = _build_ai_client(entry)
 
     # ------------------------------------------------------------------
     # Coordinator contract
@@ -110,9 +144,9 @@ class EnergyAgentCoordinator(DataUpdateCoordinator[AgentCycleResult]):
         # 3. Build pricing context
         pricing = self._build_pricing_context(opts)
 
-        # 4. Call Claude
+        # 4. Call AI provider
         try:
-            analysis: AnalysisResult = await self._claude.analyse(
+            analysis: AnalysisResult = await self._ai_client.analyse(
                 bundles, pricing, history_hours
             )
         except Exception as exc:

@@ -5,9 +5,37 @@ DOMAIN = "ha_energy_agent"
 VERSION = "1.0.0"
 
 # Config entry keys (stored in entry.data — encrypted by HA)
+CONF_AI_PROVIDER = "ai_provider"
+CONF_AI_API_KEY = "ai_api_key"
+# Kept for backward-compat reads of entries created before multi-provider support
 CONF_ANTHROPIC_API_KEY = "anthropic_api_key"
 
+# AI provider identifiers
+PROVIDER_ANTHROPIC = "anthropic"
+PROVIDER_OPENAI = "openai"
+
+# Available models per provider
+ANTHROPIC_MODELS = [
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-6",
+    "claude-opus-4-6",
+]
+OPENAI_MODELS = [
+    "gpt-4o-mini",
+    "gpt-4o",
+    "gpt-4.1",
+    "o4-mini",
+]
+
+# Reasoning models that don't support response_format=json_object
+OPENAI_REASONING_MODELS = {"o1", "o1-mini", "o3", "o3-mini", "o4-mini"}
+
+# Default models
+DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
+DEFAULT_OPENAI_MODEL = "gpt-4o"
+
 # Options keys (stored in entry.options)
+OPT_AI_MODEL = "ai_model"
 OPT_SELECTED_ENTITIES = "selected_entities"
 OPT_INTERVAL_MINUTES = "interval_minutes"
 OPT_HISTORY_HOURS = "history_hours"

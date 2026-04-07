@@ -1,10 +1,10 @@
 """Config flow for HA Energy Agent — 4-step setup + OptionsFlow.
 
 Steps:
-  1. credentials  — Anthropic API key
-  2. discover     — auto-scan HA entities (no user input, shows summary)
-  3. sensor_review — per-group multi-select to confirm/deselect entities
-  4. settings     — interval, history window, tariff, notification
+  1. user (credentials) — AI provider + API key
+  2. discover           — auto-scan HA entities (no user input, shows summary)
+  3. sensor_review      — per-group multi-select to confirm/deselect entities
+  4. settings           — interval, history window, AI model, tariff, notification
 
 OptionsFlow lets the user re-run discovery or change settings post-setup.
 """
@@ -34,15 +34,21 @@ from homeassistant.helpers.selector import (
 
 from custom_components.ha_energy_agent.const import (
     ALL_CATEGORIES,
-    CONF_ANTHROPIC_API_KEY,
+    ANTHROPIC_MODELS,
+    CONF_AI_API_KEY,
+    CONF_AI_PROVIDER,
+    DEFAULT_ANTHROPIC_MODEL,
     DEFAULT_FIXED_DAY_RATE,
     DEFAULT_FIXED_NIGHT_RATE,
     DEFAULT_HISTORY_HOURS,
     DEFAULT_INTERVAL_MINUTES,
     DEFAULT_NORDPOOL_ENTITY_ID,
     DEFAULT_NOTIFY_HA,
+    DEFAULT_OPENAI_MODEL,
     DEFAULT_TARIFF_TYPE,
     DOMAIN,
+    OPENAI_MODELS,
+    OPT_AI_MODEL,
     OPT_FIXED_DAY_RATE,
     OPT_FIXED_NIGHT_RATE,
     OPT_HISTORY_HOURS,
@@ -51,6 +57,8 @@ from custom_components.ha_energy_agent.const import (
     OPT_NOTIFY_HA,
     OPT_SELECTED_ENTITIES,
     OPT_TARIFF_TYPE,
+    PROVIDER_ANTHROPIC,
+    PROVIDER_OPENAI,
 )
 from custom_components.ha_energy_agent.discovery import discover_entities, discovery_summary
 
@@ -60,10 +68,27 @@ _LOGGER = logging.getLogger(__name__)
 _DISCOVERY_KEY = "_discovery"
 
 
-def _build_settings_schema(defaults: dict) -> vol.Schema:
+def _models_for_provider(provider: str) -> list[str]:
+    return ANTHROPIC_MODELS if provider == PROVIDER_ANTHROPIC else OPENAI_MODELS
+
+
+def _default_model_for_provider(provider: str) -> str:
+    return DEFAULT_ANTHROPIC_MODEL if provider == PROVIDER_ANTHROPIC else DEFAULT_OPENAI_MODEL
+
+
+def _build_settings_schema(defaults: dict, provider: str) -> vol.Schema:
     """Build the settings step schema."""
+    models = _models_for_provider(provider)
+    default_model = _default_model_for_provider(provider)
     return vol.Schema(
         {
+            vol.Required(OPT_AI_MODEL, default=defaults.get(OPT_AI_MODEL, default_model)): SelectSelector(
+                SelectSelectorConfig(
+                    options=models,
+                    mode=SelectSelectorMode.LIST,
+                    translation_key="ai_model",
+                )
+            ),
             vol.Required(OPT_INTERVAL_MINUTES, default=defaults.get(OPT_INTERVAL_MINUTES, DEFAULT_INTERVAL_MINUTES)): SelectSelector(
                 SelectSelectorConfig(
                     options=["15", "30", "60"],
@@ -142,20 +167,26 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
+        self._provider: str = PROVIDER_ANTHROPIC
         self._api_key: str = ""
         self._discovery_result: dict = {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Step 1: Anthropic API key."""
+        """Step 1: AI provider + API key."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            api_key = user_input[CONF_ANTHROPIC_API_KEY].strip()
-            if not api_key.startswith("sk-ant-"):
-                errors[CONF_ANTHROPIC_API_KEY] = "invalid_api_key"
+            provider = user_input[CONF_AI_PROVIDER]
+            api_key = user_input[CONF_AI_API_KEY].strip()
+
+            if provider == PROVIDER_ANTHROPIC and not api_key.startswith("sk-ant-"):
+                errors[CONF_AI_API_KEY] = "invalid_anthropic_key"
+            elif provider == PROVIDER_OPENAI and not api_key.startswith("sk-"):
+                errors[CONF_AI_API_KEY] = "invalid_openai_key"
             else:
+                self._provider = provider
                 self._api_key = api_key
                 return await self.async_step_discover()
 
@@ -163,9 +194,16 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_ANTHROPIC_API_KEY): TextSelector(
+                    vol.Required(CONF_AI_PROVIDER, default=PROVIDER_ANTHROPIC): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[PROVIDER_ANTHROPIC, PROVIDER_OPENAI],
+                            mode=SelectSelectorMode.LIST,
+                            translation_key="ai_provider",
+                        )
+                    ),
+                    vol.Required(CONF_AI_API_KEY): TextSelector(
                         TextSelectorConfig(type=TextSelectorType.PASSWORD)
-                    )
+                    ),
                 }
             ),
             errors=errors,
@@ -212,18 +250,18 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Step 4: Interval, history window, tariff configuration."""
+        """Step 4: Interval, history window, AI model, tariff configuration."""
         if user_input is not None:
             options = _coerce_settings(user_input)
             options[OPT_SELECTED_ENTITIES] = self._selected_entities
 
             return self.async_create_entry(
                 title="HA Energy Agent",
-                data={CONF_ANTHROPIC_API_KEY: self._api_key},
+                data={CONF_AI_PROVIDER: self._provider, CONF_AI_API_KEY: self._api_key},
                 options=options,
             )
 
-        schema = _build_settings_schema({})
+        schema = _build_settings_schema({}, self._provider)
         return self.async_show_form(
             step_id="settings",
             data_schema=schema,
@@ -335,7 +373,9 @@ class HAEnergyAgentOptionsFlow(config_entries.OptionsFlow):
             options[OPT_SELECTED_ENTITIES] = self._selected_entities
             return self.async_create_entry(title="", data=options)
 
-        schema = _build_settings_schema(self._config_entry.options)
+        # Derive provider for model list (backward compat: old entries default to anthropic)
+        provider = self._config_entry.data.get(CONF_AI_PROVIDER, PROVIDER_ANTHROPIC)
+        schema = _build_settings_schema(self._config_entry.options, provider)
         return self.async_show_form(
             step_id="settings",
             data_schema=schema,
