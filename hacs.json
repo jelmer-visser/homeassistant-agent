@@ -1,0 +1,5 @@
+{
+  "name": "HA Energy Agent",
+  "homeassistant": "2024.1.0",
+  "hacs": "1.32.0"
+}

@@ -5,17 +5,15 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ha_agent.analysis.prompts import (
+from custom_components.ha_energy_agent.analysis.prompts import (
     SYSTEM_PROMPT,
-    build_pricing_context_block,
     build_user_message,
-    _format_stats,
 )
-from ha_agent.models import (
+from custom_components.ha_energy_agent.models import (
+    DiscoveredSensor,
     GroupHistoryBundle,
     HistoryPoint,
     PricingContext,
-    SensorDefinition,
     SensorGroup,
     SensorHistoryBundle,
     SensorStats,
@@ -35,7 +33,7 @@ def pricing_fixed() -> PricingContext:
 
 
 @pytest.fixture
-def pricing_negative_nordpool() -> PricingContext:
+def pricing_dynamic() -> PricingContext:
     return PricingContext(
         tariff_type="dynamic",
         current_rate_eur_kwh=-0.01,
@@ -51,7 +49,7 @@ def simple_bundle(solar_sensor) -> GroupHistoryBundle:
     start = datetime(2024, 6, 15, 0, 0, tzinfo=timezone.utc)
     points = [HistoryPoint(ts=start + timedelta(minutes=30 * i), value=float(i * 50)) for i in range(4)]
     stats = SensorStats(min=0.0, max=150.0, mean=75.0, total=300.0, data_points=4)
-    bundle = SensorHistoryBundle(
+    sensor_bundle = SensorHistoryBundle(
         sensor=solar_sensor,
         current_state="1200",
         current_value=1200.0,
@@ -60,61 +58,35 @@ def simple_bundle(solar_sensor) -> GroupHistoryBundle:
         anomalies=[],
     )
     group = SensorGroup(label="solar", sensors=[solar_sensor])
-    return GroupHistoryBundle(group=group, bundles=[bundle])
-
-
-class TestFormatStats:
-    def test_none(self):
-        assert _format_stats(None) == "no data"
-
-    def test_basic(self):
-        stats = SensorStats(min=1.0, max=5.0, mean=3.0, total=15.0, data_points=5)
-        result = _format_stats(stats)
-        assert "min=1.00" in result
-        assert "max=5.00" in result
-        assert "mean=3.00" in result
-        assert "n=5" in result
-
-
-class TestPricingContextBlock:
-    def test_fixed_contains_rates(self, pricing_fixed):
-        block = build_pricing_context_block(pricing_fixed)
-        assert "0.359" in block
-        assert "0.303" in block
-        assert "fixed" in block
-
-    def test_negative_nordpool_flagged(self, pricing_negative_nordpool):
-        block = build_pricing_context_block(pricing_negative_nordpool)
-        assert "NEGATIVE" in block or "FREE" in block or "opportunity" in block.lower()
+    return GroupHistoryBundle(group=group, bundles=[sensor_bundle])
 
 
 class TestBuildUserMessage:
     def test_contains_group_label(self, simple_bundle, pricing_fixed):
-        msg = build_user_message([simple_bundle], pricing_fixed)
+        msg = build_user_message([simple_bundle], pricing_fixed, history_hours=24)
         assert "SOLAR" in msg
 
     def test_contains_entity_id(self, simple_bundle, pricing_fixed):
-        msg = build_user_message([simple_bundle], pricing_fixed)
+        msg = build_user_message([simple_bundle], pricing_fixed, history_hours=24)
         assert "sensor.opendtu_07869c_ac_power" in msg
 
     def test_contains_current_state(self, simple_bundle, pricing_fixed):
-        msg = build_user_message([simple_bundle], pricing_fixed)
+        msg = build_user_message([simple_bundle], pricing_fixed, history_hours=24)
         assert "1200" in msg
 
     def test_contains_pricing_section(self, simple_bundle, pricing_fixed):
-        msg = build_user_message([simple_bundle], pricing_fixed)
-        assert "PRICING CONTEXT" in msg
+        msg = build_user_message([simple_bundle], pricing_fixed, history_hours=24)
+        assert "PRICING" in msg
 
-    def test_ends_with_json_instruction(self, simple_bundle, pricing_fixed):
-        msg = build_user_message([simple_bundle], pricing_fixed)
+    def test_contains_fixed_rate(self, simple_bundle, pricing_fixed):
+        msg = build_user_message([simple_bundle], pricing_fixed, history_hours=24)
+        assert "0.359" in msg or "0.3590" in msg
+
+    def test_contains_json_instruction(self, simple_bundle, pricing_fixed):
+        msg = build_user_message([simple_bundle], pricing_fixed, history_hours=24)
         assert "JSON" in msg
 
-    def test_system_prompt_is_string(self):
-        assert isinstance(SYSTEM_PROMPT, str)
-        assert len(SYSTEM_PROMPT) > 100
-
     def test_anomaly_appears_in_message(self, solar_sensor, pricing_fixed):
-        """Anomalies in a bundle should be visible in the generated message."""
         start = datetime(2024, 6, 15, 0, 0, tzinfo=timezone.utc)
         points = [HistoryPoint(ts=start + timedelta(minutes=30 * i), value=0.0) for i in range(4)]
         stats = SensorStats(min=0.0, max=0.0, mean=0.0, total=0.0, data_points=4)
@@ -128,5 +100,29 @@ class TestBuildUserMessage:
         )
         group = SensorGroup(label="solar", sensors=[solar_sensor])
         gb = GroupHistoryBundle(group=group, bundles=[bundle])
-        msg = build_user_message([gb], pricing_fixed)
+        msg = build_user_message([gb], pricing_fixed, history_hours=24)
         assert "Solar power near-zero" in msg
+
+    def test_dynamic_pricing_section(self, simple_bundle, pricing_dynamic):
+        msg = build_user_message([simple_bundle], pricing_dynamic, history_hours=24)
+        assert "dynamic" in msg.lower() or "-0.01" in msg
+
+    def test_history_hours_mentioned(self, simple_bundle, pricing_fixed):
+        msg = build_user_message([simple_bundle], pricing_fixed, history_hours=24)
+        assert "24" in msg
+
+    def test_stats_included(self, simple_bundle, pricing_fixed):
+        msg = build_user_message([simple_bundle], pricing_fixed, history_hours=24)
+        assert "150" in msg or "75" in msg
+
+    def test_no_pricing_context(self, simple_bundle):
+        msg = build_user_message([simple_bundle], None, history_hours=24)
+        assert "PRICING" in msg
+
+    def test_system_prompt_is_non_empty_string(self):
+        assert isinstance(SYSTEM_PROMPT, str)
+        assert len(SYSTEM_PROMPT) > 100
+
+    def test_system_prompt_contains_json_schema(self):
+        assert "efficiency_score" in SYSTEM_PROMPT
+        assert "tips" in SYSTEM_PROMPT

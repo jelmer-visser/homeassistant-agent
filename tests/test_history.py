@@ -1,119 +1,102 @@
-"""Tests for ha/history.py — resampling, stats, anomaly detection."""
+"""Tests for processing/history.py — resampling, stats, anomaly detection."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ha_agent.ha.history import (
-    _parse_float,
-    _resample_to_n_points,
-    compute_stats,
-    detect_anomalies,
+from custom_components.ha_energy_agent.models import (
+    DiscoveredSensor,
+    HistoryPoint,
+    SensorStats,
 )
-from ha_agent.models import HistoryPoint, SensorDefinition
+from custom_components.ha_energy_agent.processing.history import (
+    _compute_stats,
+    _detect_anomalies,
+    _parse_numeric,
+    _resample,
+)
 
 
 # ---------------------------------------------------------------------------
-# _parse_float
+# _parse_numeric
 # ---------------------------------------------------------------------------
 
-class TestParseFloat:
-    def test_valid(self):
-        assert _parse_float("42.5") == 42.5
+class TestParseNumeric:
+    def test_valid_float(self):
+        assert _parse_numeric("42.5") == 42.5
 
     def test_integer_string(self):
-        assert _parse_float("100") == 100.0
+        assert _parse_numeric("100") == 100.0
 
     def test_unavailable(self):
-        assert _parse_float("unavailable") is None
+        assert _parse_numeric("unavailable") is None
 
     def test_unknown(self):
-        assert _parse_float("unknown") is None
+        assert _parse_numeric("unknown") is None
 
     def test_empty(self):
-        assert _parse_float("") is None
+        assert _parse_numeric("") is None
 
     def test_non_numeric(self):
-        assert _parse_float("on") is None
+        assert _parse_numeric("on") is None
 
     def test_negative(self):
-        assert _parse_float("-2731") == -2731.0
+        assert _parse_numeric("-2731") == -2731.0
 
 
 # ---------------------------------------------------------------------------
-# _resample_to_n_points
+# _resample
 # ---------------------------------------------------------------------------
 
 class TestResample:
     def _make_points(self, start, n, step_minutes=30, base=100.0, step=10.0):
         return [
-            {
-                "state": str(base + i * step),
-                "last_changed": (start + timedelta(minutes=step_minutes * i)).isoformat(),
-            }
+            HistoryPoint(
+                ts=start + timedelta(minutes=step_minutes * i),
+                value=base + i * step,
+            )
             for i in range(n)
         ]
 
-    def test_basic_resample(self, start, now):
-        raw = self._make_points(start, 96, step_minutes=15)  # 15-min data → 48 buckets
-        result = _resample_to_n_points(raw, 48, start, now)
+    def test_downsample(self, start):
+        points = self._make_points(start, 96)
+        result = _resample(points, 48)
         assert len(result) == 48
 
-    def test_exact_bucket_count(self, start, now):
-        raw = self._make_points(start, 48, step_minutes=30)
-        result = _resample_to_n_points(raw, 48, start, now)
+    def test_no_change_when_already_short(self, start):
+        points = self._make_points(start, 24)
+        result = _resample(points, 48)
+        assert len(result) == 24
+
+    def test_exact_target(self, start):
+        points = self._make_points(start, 48)
+        result = _resample(points, 48)
         assert len(result) == 48
 
-    def test_empty_input(self, start, now):
-        assert _resample_to_n_points([], 48, start, now) == []
+    def test_empty_input(self):
+        assert _resample([], 48) == []
 
-    def test_single_point(self, start, now):
-        raw = [{"state": "500", "last_changed": start.isoformat()}]
-        result = _resample_to_n_points(raw, 48, start, now)
-        assert len(result) >= 1
-        assert result[0].value == 500.0
+    def test_returns_history_points(self, start):
+        points = self._make_points(start, 10)
+        result = _resample(points, 5)
+        assert all(isinstance(p, HistoryPoint) for p in result)
 
-    def test_filters_unavailable(self, start, now):
-        raw = [
-            {"state": "100", "last_changed": start.isoformat()},
-            {"state": "unavailable", "last_changed": (start + timedelta(hours=1)).isoformat()},
-            {"state": "200", "last_changed": (start + timedelta(hours=2)).isoformat()},
-        ]
-        result = _resample_to_n_points(raw, 48, start, now)
-        values = [p.value for p in result]
-        assert all(v in (100.0, 200.0) for v in values)
-
-    def test_forward_fill(self, start, now):
-        """Leading value should be forward-filled into empty buckets."""
-        raw = [{"state": "999", "last_changed": start.isoformat()}]
-        result = _resample_to_n_points(raw, 4, start, now)
-        # All buckets from the first one onwards should equal 999
-        assert all(p.value == 999.0 for p in result)
-
-    def test_returns_history_points(self, start, now):
-        raw = [{"state": "42", "last_changed": start.isoformat()}]
-        result = _resample_to_n_points(raw, 48, start, now)
-        assert isinstance(result[0], HistoryPoint)
-
-    def test_timestamps_in_order(self, start, now):
-        raw = self._make_points(start, 48)
-        result = _resample_to_n_points(raw, 48, start, now)
+    def test_timestamps_in_order(self, start):
+        points = self._make_points(start, 96)
+        result = _resample(points, 48)
         for i in range(1, len(result)):
-            assert result[i].ts > result[i - 1].ts
+            assert result[i].ts >= result[i - 1].ts
 
 
 # ---------------------------------------------------------------------------
-# compute_stats
+# _compute_stats
 # ---------------------------------------------------------------------------
 
 class TestComputeStats:
-    def test_basic(self, start):
-        points = [
-            HistoryPoint(ts=start + timedelta(minutes=30 * i), value=float(v))
-            for i, v in enumerate([10, 20, 30, 40])
-        ]
-        stats = compute_stats(points)
+    def test_basic(self):
+        values = [10.0, 20.0, 30.0, 40.0]
+        stats = _compute_stats(values)
         assert stats is not None
         assert stats.min == 10.0
         assert stats.max == 40.0
@@ -121,53 +104,51 @@ class TestComputeStats:
         assert stats.total == 100.0
         assert stats.data_points == 4
 
-    def test_empty(self):
-        assert compute_stats([]) is None
+    def test_empty_returns_none(self):
+        assert _compute_stats([]) is None
 
-    def test_single(self, start):
-        points = [HistoryPoint(ts=start, value=55.0)]
-        stats = compute_stats(points)
+    def test_single_value(self):
+        stats = _compute_stats([55.0])
         assert stats.min == stats.max == stats.mean == stats.total == 55.0
 
 
 # ---------------------------------------------------------------------------
-# detect_anomalies
+# _detect_anomalies
 # ---------------------------------------------------------------------------
 
 class TestDetectAnomalies:
-    def _make_history(self, start, values):
+    def _make_points(self, start, values):
         return [
             HistoryPoint(ts=start + timedelta(minutes=30 * i), value=v)
             for i, v in enumerate(values)
         ]
 
-    def test_relay_switches_high(self, relay_sensor, start):
-        points = self._make_history(start, [66.0] * 10)
-        stats = compute_stats(points)
-        anomalies = detect_anomalies(relay_sensor, points, stats, "66")
-        assert any("relay switch" in a.lower() for a in anomalies)
+    def test_flat_line_detected(self, solar_sensor, start):
+        values = [500.0] * 20
+        stats = _compute_stats(values)
+        anomalies = _detect_anomalies(solar_sensor, values, stats)
+        assert any("stuck" in a.lower() or "constant" in a.lower() for a in anomalies)
 
-    def test_relay_switches_normal(self, relay_sensor, start):
-        points = self._make_history(start, [5.0] * 10)
-        stats = compute_stats(points)
-        anomalies = detect_anomalies(relay_sensor, points, stats, "5")
-        assert not any("relay" in a.lower() for a in anomalies)
+    def test_soc_jump_detected(self, battery_soc_sensor, start):
+        values = [30.0] + [90.0] * 19  # jump > 50%
+        stats = _compute_stats(values)
+        anomalies = _detect_anomalies(battery_soc_sensor, values, stats)
+        assert any("soc" in a.lower() or "jump" in a.lower() for a in anomalies)
 
-    def test_solar_zero(self, solar_sensor, start):
-        points = self._make_history(start, [0.0] * 20)
-        stats = compute_stats(points)
-        anomalies = detect_anomalies(solar_sensor, points, stats, "0")
-        assert any("solar" in a.lower() or "zero" in a.lower() for a in anomalies)
-
-    def test_rapid_soc_change(self, battery_soc_sensor, start):
-        # 80% drop in 30 minutes = 160%/h >> threshold
-        points = self._make_history(start, [100.0, 20.0] + [20.0] * 10)
-        stats = compute_stats(points)
-        anomalies = detect_anomalies(battery_soc_sensor, points, stats, "20")
-        assert any("rapid" in a.lower() or "soc" in a.lower() for a in anomalies)
+    def test_solar_extended_zero_detected(self, solar_sensor, start):
+        values = [0.0] * 40 + [200.0] * 10  # 80% zeros but max > 0
+        stats = _compute_stats(values)
+        anomalies = _detect_anomalies(solar_sensor, values, stats)
+        assert any("zero" in a.lower() or "inverter" in a.lower() for a in anomalies)
 
     def test_no_anomaly_normal_operation(self, solar_sensor, start):
-        points = self._make_history(start, [1000.0 + i * 10 for i in range(20)])
-        stats = compute_stats(points)
-        anomalies = detect_anomalies(solar_sensor, points, stats, "1200")
+        values = [float(1000 + i * 10) for i in range(20)]
+        stats = _compute_stats(values)
+        anomalies = _detect_anomalies(solar_sensor, values, stats)
         assert anomalies == []
+
+    def test_implausible_power_spike(self, grid_sensor, start):
+        values = [500.0] * 19 + [200_000.0]  # > 100 kW
+        stats = _compute_stats(values)
+        anomalies = _detect_anomalies(grid_sensor, values, stats)
+        assert any("100" in a or "outlier" in a.lower() or "exceeds" in a.lower() for a in anomalies)

@@ -5,39 +5,43 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ha_agent.models import HistoryPoint, SensorDefinition, SensorStats
+from custom_components.ha_energy_agent.models import (
+    DiscoveredSensor,
+    HistoryPoint,
+    SensorStats,
+)
 
 
 @pytest.fixture
-def solar_sensor() -> SensorDefinition:
-    return SensorDefinition(
+def solar_sensor() -> DiscoveredSensor:
+    return DiscoveredSensor(
         entity_id="sensor.opendtu_07869c_ac_power",
         name="Solar total AC power",
         unit="W",
         role="power",
-        group="solar",
+        category="solar",
     )
 
 
 @pytest.fixture
-def battery_soc_sensor() -> SensorDefinition:
-    return SensorDefinition(
+def battery_soc_sensor() -> DiscoveredSensor:
+    return DiscoveredSensor(
         entity_id="sensor.zendure_2400_ac_laadpercentage",
         name="Battery combined SoC",
         unit="%",
         role="soc",
-        group="battery",
+        category="battery",
     )
 
 
 @pytest.fixture
-def relay_sensor() -> SensorDefinition:
-    return SensorDefinition(
-        entity_id="sensor.zendure_2400_ac_relais_schakelingen_totaal_vandaag",
-        name="Battery relay switches today",
-        unit="count",
-        role="counter",
-        group="battery",
+def grid_sensor() -> DiscoveredSensor:
+    return DiscoveredSensor(
+        entity_id="sensor.p1_meter_power",
+        name="Grid power",
+        unit="W",
+        role="power",
+        category="grid",
     )
 
 
@@ -52,13 +56,9 @@ def start(now) -> datetime:
 
 
 @pytest.fixture
-def sample_raw_history(start) -> list[dict]:
-    """48 synthetic HA history points spaced 30 min apart."""
-    points = []
-    for i in range(48):
-        ts = start + timedelta(minutes=30 * i)
-        points.append({
-            "state": str(100 + i * 10),
-            "last_changed": ts.isoformat(),
-        })
-    return points
+def sample_points(start) -> list[HistoryPoint]:
+    """48 synthetic history points spaced 30 min apart."""
+    return [
+        HistoryPoint(ts=start + timedelta(minutes=30 * i), value=float(100 + i * 10))
+        for i in range(48)
+    ]

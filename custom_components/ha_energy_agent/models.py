@@ -1,41 +1,42 @@
-"""All Pydantic data models for the HA energy agent."""
+"""Pydantic data models for HA Energy Agent."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel, Field
 
 
 # ---------------------------------------------------------------------------
-# Sensor configuration (from sensors.yaml)
+# Sensor config — built from dynamic discovery (replaces sensors.yaml)
 # ---------------------------------------------------------------------------
 
-class SensorDefinition(BaseModel):
+class DiscoveredSensor(BaseModel):
+    """A single HA entity discovered and categorised during setup."""
     entity_id: str
-    name: str
-    unit: str = ""
-    role: str = ""
-    group: str = ""
-    is_binary: bool = False
+    name: str                   # friendly_name from HA attributes
+    unit: str = ""              # unit_of_measurement
+    role: str = ""              # power | energy | soc | temperature | binary | mode | price | etc.
+    category: str = ""          # grid | solar | battery | heat_pump | temperature | pricing
+    is_binary: bool = False     # True for binary_sensor.* entities
+    score: int = 0              # Discovery confidence score (higher = more certain)
 
 
 class SensorGroup(BaseModel):
+    """Grouped discovered sensors for one energy category."""
     label: str
-    sensors: list[SensorDefinition]
+    sensors: list[DiscoveredSensor] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatible alias so processing/history.py can import SensorDefinition
+# ---------------------------------------------------------------------------
+SensorDefinition = DiscoveredSensor
 
 
 # ---------------------------------------------------------------------------
 # Raw HA data
 # ---------------------------------------------------------------------------
-
-class EntityState(BaseModel):
-    entity_id: str
-    state: str
-    last_changed: Optional[datetime] = None
-    unit: str = ""
-    friendly_name: str = ""
-
 
 class HistoryPoint(BaseModel):
     ts: datetime
@@ -50,12 +51,12 @@ class SensorStats(BaseModel):
     min: float
     max: float
     mean: float
-    total: float          # sum of all values (useful for energy sensors)
+    total: float
     data_points: int
 
 
 class SensorHistoryBundle(BaseModel):
-    sensor: SensorDefinition
+    sensor: DiscoveredSensor
     current_state: str
     current_value: Optional[float] = None
     resampled: list[HistoryPoint] = Field(default_factory=list)
@@ -65,7 +66,7 @@ class SensorHistoryBundle(BaseModel):
 
 class GroupHistoryBundle(BaseModel):
     group: SensorGroup
-    bundles: list[SensorHistoryBundle]
+    bundles: list[SensorHistoryBundle] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -99,8 +100,19 @@ class AnalysisResult(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Agent cycle metadata
+# Orchestration metadata
 # ---------------------------------------------------------------------------
+
+class PricingContext(BaseModel):
+    tariff_type: str                        # "fixed" | "dynamic"
+    current_rate_eur_kwh: Optional[float] = None
+    day_rate_eur_kwh: Optional[float] = None
+    night_rate_eur_kwh: Optional[float] = None
+    nord_pool_current: Optional[float] = None
+    gas_rate_eur_m3: Optional[float] = None
+    co2_intensity_g_kwh: Optional[float] = None
+    current_tariff_period: str = ""         # "day" | "night"
+
 
 class AgentCycleResult(BaseModel):
     started_at: datetime
@@ -108,16 +120,4 @@ class AgentCycleResult(BaseModel):
     duration_seconds: float
     analysis: AnalysisResult
     notification_sent: bool = False
-    log_path: str = ""
     error: Optional[str] = None
-
-
-class PricingContext(BaseModel):
-    tariff_type: str                        # "fixed" or "dynamic"
-    current_rate_eur_kwh: Optional[float] = None
-    day_rate_eur_kwh: Optional[float] = None
-    night_rate_eur_kwh: Optional[float] = None
-    nord_pool_current: Optional[float] = None
-    gas_rate_eur_m3: Optional[float] = None
-    co2_intensity_g_kwh: Optional[float] = None
-    current_tariff_period: str = ""         # "day" or "night"
