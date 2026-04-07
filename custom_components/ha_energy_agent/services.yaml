@@ -1,0 +1,4 @@
+run_analysis_now:
+  name: Run analysis now
+  description: Trigger an immediate energy analysis cycle, bypassing the scheduled interval.
+  fields: {}
