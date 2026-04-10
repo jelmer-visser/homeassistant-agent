@@ -12,6 +12,7 @@ from custom_components.ha_energy_agent.models import (
     GroupHistoryBundle,
     LongTermContext,
     PricingContext,
+    StatAggregate,
 )
 
 
@@ -90,11 +91,20 @@ def _bundle_section(bundle: "GroupHistoryBundle") -> str:
 
         if sb.stats:
             st = sb.stats
-            lines.append(
-                f"  Stats ({len(sb.resampled)} pts): "
-                f"min={st.min:.2f}, max={st.max:.2f}, "
-                f"mean={st.mean:.2f}, total={st.total:.2f}"
-            )
+            if s.role == "energy":
+                # Cumulative / daily-reset sensor: max = total produced in the window;
+                # sum of sample points is meaningless so we omit it.
+                lines.append(
+                    f"  Stats ({len(sb.resampled)} pts): "
+                    f"peak={st.max:.2f} {s.unit or ''} (= total produced in window), "
+                    f"mean={st.mean:.2f}"
+                )
+            else:
+                lines.append(
+                    f"  Stats ({len(sb.resampled)} pts): "
+                    f"min={st.min:.2f}, max={st.max:.2f}, "
+                    f"mean={st.mean:.2f}, total={st.total:.2f}"
+                )
 
         if sb.resampled:
             # Show up to 12 sample points inline
@@ -121,11 +131,17 @@ def _long_term_section(ctx: LongTermContext) -> str:
         if b.daily:
             recent = b.daily[-7:]
             if b.role == "energy":
-                pairs = ", ".join(
-                    f"{a.date}={a.change:.1f}kWh" if a.change is not None
-                    else f"{a.date}=?"
-                    for a in recent
-                )
+                def _energy_val(a: "StatAggregate") -> str:
+                    # `change` is correct for total_increasing sensors (e.g. Yield Total).
+                    # For daily-reset sensors (e.g. Yield Day), change ≈ 0 because the
+                    # recorder sees first≈0 and last≈0 at midnight boundaries — fall back
+                    # to max which equals the day's peak/total production.
+                    if a.change is not None and a.change > 0:
+                        return f"{a.date}={a.change:.1f}kWh"
+                    if a.max is not None and a.max > 0:
+                        return f"{a.date}={a.max:.1f}kWh (peak)"
+                    return f"{a.date}=?"
+                pairs = ", ".join(_energy_val(a) for a in recent)
                 lines.append(f"  Daily (last 7d): {pairs}")
             elif b.role in ("power", "power_net", "soc", "temperature"):
                 pairs = ", ".join(
@@ -137,11 +153,13 @@ def _long_term_section(ctx: LongTermContext) -> str:
 
         if b.monthly:
             if b.role == "energy":
-                pairs = ", ".join(
-                    f"{a.date}={a.change:.0f}kWh" if a.change is not None
-                    else f"{a.date}=?"
-                    for a in b.monthly
-                )
+                def _energy_val_m(a: "StatAggregate") -> str:
+                    if a.change is not None and a.change > 0:
+                        return f"{a.date}={a.change:.0f}kWh"
+                    if a.max is not None and a.max > 0:
+                        return f"{a.date}={a.max:.0f}kWh (peak)"
+                    return f"{a.date}=?"
+                pairs = ", ".join(_energy_val_m(a) for a in b.monthly)
             else:
                 pairs = ", ".join(
                     f"{a.date}={a.mean:.1f}" if a.mean is not None else f"{a.date}=?"
