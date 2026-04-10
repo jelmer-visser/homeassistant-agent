@@ -111,6 +111,9 @@ class EnergyTipsTodoList(CoordinatorEntity["EnergyAgentCoordinator"], TodoListEn
         # Sync immediately if coordinator already has data
         if self.coordinator.data:
             self._sync_tips(self.coordinator.data.analysis.tips)
+        # Always write state after restoring from store so the entity isn't
+        # stuck as unavailable from a previous failed cycle.
+        self.async_write_ha_state()
 
     # ------------------------------------------------------------------
     # CoordinatorEntity hook
@@ -119,7 +122,10 @@ class EnergyTipsTodoList(CoordinatorEntity["EnergyAgentCoordinator"], TodoListEn
     def _handle_coordinator_update(self) -> None:
         """Called on each coordinator refresh — sync tips into the list."""
         if self.coordinator.data:
-            self._sync_tips(self.coordinator.data.analysis.tips)
+            try:
+                self._sync_tips(self.coordinator.data.analysis.tips)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Error syncing tips from coordinator data")
         self.async_write_ha_state()
 
     # ------------------------------------------------------------------
