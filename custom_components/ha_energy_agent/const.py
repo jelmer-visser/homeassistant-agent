@@ -21,11 +21,9 @@ ANTHROPIC_MODELS = [
     "claude-opus-4-6",
 ]
 OPENAI_MODELS = [
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-4.1-nano",
-    "gpt-4.1-mini",
-    "gpt-4.1",
+    "gpt-5.4-nano",
+    "gpt-5.4-mini",
+    "gpt-5.4",
     "o4-mini",
 ]
 
@@ -34,7 +32,7 @@ OPENAI_REASONING_MODELS = {"o1", "o1-mini", "o3", "o3-mini", "o4-mini"}
 
 # Default models
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
-DEFAULT_OPENAI_MODEL = "gpt-4o"
+DEFAULT_OPENAI_MODEL = "gpt-5.4"
 
 # Options keys (stored in entry.options)
 OPT_AI_MODEL = "ai_model"
