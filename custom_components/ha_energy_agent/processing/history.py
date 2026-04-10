@@ -251,13 +251,13 @@ async def fetch_long_term_context(
         _LOGGER.warning("Failed to fetch long-term statistics: %s", exc)
         return LongTermContext()
 
-    def _to_agg(row, fmt: str) -> StatAggregate:
+    def _to_agg(row: dict, fmt: str) -> StatAggregate:
         return StatAggregate(
-            date=row.start.strftime(fmt),
-            mean=getattr(row, "mean", None),
-            min=getattr(row, "min", None),
-            max=getattr(row, "max", None),
-            change=getattr(row, "change", None),
+            date=row["start"].strftime(fmt),
+            mean=row.get("mean"),
+            min=row.get("min"),
+            max=row.get("max"),
+            change=row.get("change"),
         )
 
     bundles: list[SensorLongTermBundle] = []
