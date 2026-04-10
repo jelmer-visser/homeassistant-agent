@@ -13,6 +13,16 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor", "todo"]
 
 
+async def async_setup(hass: "HomeAssistant", config: dict) -> bool:
+    """Register the custom Lovelace card once at integration load time."""
+    try:
+        from custom_components.ha_energy_agent.frontend import async_setup_frontend
+        await async_setup_frontend(hass)
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning("Frontend card setup failed (non-fatal): %s", exc)
+    return True
+
+
 async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool:
     """Set up HA Energy Agent from a config entry."""
     import voluptuous as vol
@@ -26,12 +36,6 @@ async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
-    try:
-        from custom_components.ha_energy_agent.frontend import async_setup_frontend
-        await async_setup_frontend(hass)
-    except Exception as exc:  # noqa: BLE001
-        _LOGGER.warning("Frontend card setup failed (non-fatal): %s", exc)
 
     async def _handle_run_now(call: ServiceCall) -> None:
         for coord in hass.data.get(DOMAIN, {}).values():
