@@ -18,9 +18,12 @@ from custom_components.ha_energy_agent.models import (
     DiscoveredSensor,
     GroupHistoryBundle,
     HistoryPoint,
+    LongTermContext,
     SensorGroup,
     SensorHistoryBundle,
+    SensorLongTermBundle,
     SensorStats,
+    StatAggregate,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -201,3 +204,74 @@ async def fetch_history_bundles(
         result.append(GroupHistoryBundle(group=group, bundles=bundles))
 
     return result
+
+
+async def fetch_long_term_context(
+    hass: "HomeAssistant",
+    groups: list[SensorGroup],
+) -> LongTermContext:
+    """Fetch daily (last 30 days) and monthly (last 12 months) aggregates from HA statistics.
+
+    Uses the pre-computed statistics tables in the recorder DB — much faster
+    than loading raw state changes for long windows. Returns an empty
+    LongTermContext if statistics are unavailable or the recorder is off.
+    """
+    from homeassistant.components.recorder import get_instance
+    from homeassistant.components.recorder.statistics import statistics_during_period
+
+    end_time = datetime.now(timezone.utc)
+    daily_start = end_time - timedelta(days=30)
+    monthly_start = end_time - timedelta(days=365)
+
+    all_sensors: list[DiscoveredSensor] = [s for g in groups for s in g.sensors]
+    if not all_sensors:
+        return LongTermContext()
+
+    recorder = get_instance(hass)
+    entity_ids = [s.entity_id for s in all_sensors]
+
+    _LOGGER.debug("Fetching long-term statistics for %d entities", len(entity_ids))
+
+    def _fetch_stats() -> tuple[dict, dict]:
+        daily = statistics_during_period(
+            hass, daily_start, end_time,
+            set(entity_ids), "day", None,
+            {"mean", "min", "max", "sum", "change"},
+        )
+        monthly = statistics_during_period(
+            hass, monthly_start, end_time,
+            set(entity_ids), "month", None,
+            {"mean", "min", "max", "sum", "change"},
+        )
+        return daily, monthly
+
+    try:
+        daily_data, monthly_data = await recorder.async_add_executor_job(_fetch_stats)
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning("Failed to fetch long-term statistics: %s", exc)
+        return LongTermContext()
+
+    def _to_agg(row, fmt: str) -> StatAggregate:
+        return StatAggregate(
+            date=row.start.strftime(fmt),
+            mean=getattr(row, "mean", None),
+            min=getattr(row, "min", None),
+            max=getattr(row, "max", None),
+            change=getattr(row, "change", None),
+        )
+
+    bundles: list[SensorLongTermBundle] = []
+    for sensor in all_sensors:
+        daily = [_to_agg(r, "%Y-%m-%d") for r in daily_data.get(sensor.entity_id, [])]
+        monthly = [_to_agg(r, "%Y-%m") for r in monthly_data.get(sensor.entity_id, [])]
+        if daily or monthly:
+            bundles.append(SensorLongTermBundle(
+                entity_id=sensor.entity_id,
+                name=sensor.name,
+                unit=sensor.unit,
+                role=sensor.role,
+                daily=daily,
+                monthly=monthly,
+            ))
+
+    return LongTermContext(bundles=bundles)

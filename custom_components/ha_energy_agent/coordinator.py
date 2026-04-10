@@ -52,9 +52,13 @@ from custom_components.ha_energy_agent.discovery import build_sensor_groups
 from custom_components.ha_energy_agent.models import (
     AgentCycleResult,
     AnalysisResult,
+    LongTermContext,
     PricingContext,
 )
-from custom_components.ha_energy_agent.processing.history import fetch_history_bundles
+from custom_components.ha_energy_agent.processing.history import (
+    fetch_history_bundles,
+    fetch_long_term_context,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -141,13 +145,16 @@ class EnergyAgentCoordinator(DataUpdateCoordinator[AgentCycleResult]):
             max_points=DEFAULT_MAX_HISTORY_POINTS,
         )
 
+        # 2b. Fetch long-term statistical context (best-effort; never raises)
+        long_term: LongTermContext = await fetch_long_term_context(self.hass, groups)
+
         # 3. Build pricing context
         pricing = self._build_pricing_context(opts)
 
         # 4. Call AI provider
         try:
             analysis: AnalysisResult = await self._ai_client.analyse(
-                bundles, pricing, history_hours
+                bundles, pricing, history_hours, long_term
             )
         except Exception as exc:
             _LOGGER.error("AI analysis failed: %s: %s", type(exc).__name__, exc)

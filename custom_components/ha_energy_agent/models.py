@@ -55,6 +55,32 @@ class SensorStats(BaseModel):
     data_points: int
 
 
+# ---------------------------------------------------------------------------
+# Long-term statistical context (daily / monthly aggregates)
+# ---------------------------------------------------------------------------
+
+class StatAggregate(BaseModel):
+    """One pre-aggregated bucket (day or month) from HA statistics."""
+    date: str                        # "2025-03-15" (daily) or "2025-03" (monthly)
+    mean: Optional[float] = None     # avg over period (power, SOC, temperature)
+    min: Optional[float] = None
+    max: Optional[float] = None
+    change: Optional[float] = None   # delta kWh over period (energy sensors)
+
+
+class SensorLongTermBundle(BaseModel):
+    entity_id: str
+    name: str
+    unit: str
+    role: str
+    daily: list[StatAggregate] = Field(default_factory=list)    # last 30 days
+    monthly: list[StatAggregate] = Field(default_factory=list)  # last 12 months
+
+
+class LongTermContext(BaseModel):
+    bundles: list[SensorLongTermBundle] = Field(default_factory=list)
+
+
 class SensorHistoryBundle(BaseModel):
     sensor: DiscoveredSensor
     current_state: str

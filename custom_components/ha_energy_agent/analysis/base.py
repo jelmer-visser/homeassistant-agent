@@ -6,6 +6,7 @@ from typing import Optional, Protocol, runtime_checkable
 from custom_components.ha_energy_agent.models import (
     AnalysisResult,
     GroupHistoryBundle,
+    LongTermContext,
     PricingContext,
 )
 
@@ -19,6 +20,7 @@ class AnalysisClient(Protocol):
         bundles: list[GroupHistoryBundle],
         pricing: Optional[PricingContext],
         history_hours: int,
+        long_term: Optional[LongTermContext] = None,
     ) -> AnalysisResult:
         """Run one analysis cycle and return a validated AnalysisResult."""
         ...

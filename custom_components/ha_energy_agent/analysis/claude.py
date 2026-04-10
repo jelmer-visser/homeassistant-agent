@@ -7,6 +7,7 @@ from typing import Optional
 from custom_components.ha_energy_agent.models import (
     AnalysisResult,
     GroupHistoryBundle,
+    LongTermContext,
     PricingContext,
 )
 from custom_components.ha_energy_agent.analysis.parser import parse_claude_response
@@ -44,9 +45,10 @@ class ClaudeAnalysisClient:
         bundles: list[GroupHistoryBundle],
         pricing: Optional[PricingContext],
         history_hours: int,
+        long_term: Optional[LongTermContext] = None,
     ) -> AnalysisResult:
         """Run one analysis cycle and return a validated AnalysisResult."""
-        user_message = build_user_message(bundles, pricing, history_hours)
+        user_message = build_user_message(bundles, pricing, history_hours, long_term)
 
         _LOGGER.debug("Sending %d chars to Claude (%s)", len(user_message), self._model)
 

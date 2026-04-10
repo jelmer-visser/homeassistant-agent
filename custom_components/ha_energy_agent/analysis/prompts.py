@@ -6,10 +6,11 @@ adapting to whichever categories the user has configured.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from custom_components.ha_energy_agent.models import (
     GroupHistoryBundle,
+    LongTermContext,
     PricingContext,
 )
 
@@ -29,6 +30,7 @@ Guidelines:
 - Provide realistic estimated savings in EUR where possible.
 - When you suggest a Home Assistant automation, output valid YAML.
 - Acknowledge data gaps honestly; do not fabricate readings.
+- You receive both fine-grained recent data (last 24–48h) and long-term aggregates (daily last 30 days, monthly last 12 months). Use seasonal and weekly patterns to inform your efficiency score and tips.
 - Keep the summary concise (2–4 sentences) and conversational.
 - Return ONLY valid JSON matching the schema below — no prose outside the JSON.
 
@@ -104,6 +106,49 @@ def _bundle_section(bundle: "GroupHistoryBundle") -> str:
     return "\n".join(lines)
 
 
+def _long_term_section(ctx: LongTermContext) -> str:
+    """Render daily/monthly aggregates as a compact text block."""
+    if not ctx.bundles:
+        return ""
+
+    lines = ["\n### LONG-TERM CONTEXT (daily last 30 days / monthly last 12 months)"]
+
+    for b in ctx.bundles:
+        lines.append(f"\n**{b.name}** [{b.unit}] — {b.role}")
+
+        if b.daily:
+            recent = b.daily[-7:]
+            if b.role == "energy":
+                pairs = ", ".join(
+                    f"{a.date}={a.change:.1f}kWh" if a.change is not None
+                    else f"{a.date}=?"
+                    for a in recent
+                )
+                lines.append(f"  Daily (last 7d): {pairs}")
+            elif b.role in ("power", "soc", "temperature"):
+                pairs = ", ".join(
+                    f"{a.date}={a.mean:.1f}" if a.mean is not None else f"{a.date}=?"
+                    for a in recent
+                )
+                lines.append(f"  Daily mean (last 7d): {pairs}")
+
+        if b.monthly:
+            if b.role == "energy":
+                pairs = ", ".join(
+                    f"{a.date}={a.change:.0f}kWh" if a.change is not None
+                    else f"{a.date}=?"
+                    for a in b.monthly
+                )
+            else:
+                pairs = ", ".join(
+                    f"{a.date}={a.mean:.1f}" if a.mean is not None else f"{a.date}=?"
+                    for a in b.monthly
+                )
+            lines.append(f"  Monthly: {pairs}")
+
+    return "\n".join(lines)
+
+
 def _pricing_section(ctx: Optional[PricingContext]) -> str:
     if ctx is None:
         return "\n### PRICING\nNo pricing data configured."
@@ -127,6 +172,7 @@ def build_user_message(
     bundles: list["GroupHistoryBundle"],
     pricing: Optional[PricingContext],
     history_hours: int,
+    long_term: Optional[LongTermContext] = None,
 ) -> str:
     """Assemble the full user message sent to Claude."""
     now = datetime.now(timezone.utc)
@@ -142,6 +188,9 @@ def build_user_message(
 
     for bundle in bundles:
         lines.append(_bundle_section(bundle))
+
+    if long_term:
+        lines.append(_long_term_section(long_term))
 
     lines.append(_pricing_section(pricing))
 
