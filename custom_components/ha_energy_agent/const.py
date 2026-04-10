@@ -44,6 +44,12 @@ OPT_FIXED_DAY_RATE = "fixed_day_rate"
 OPT_FIXED_NIGHT_RATE = "fixed_night_rate"
 OPT_NORDPOOL_ENTITY_ID = "nordpool_entity_id"
 OPT_NOTIFY_HA = "notify_ha"
+OPT_GRID_POWER_MODE = "grid_power_mode"
+
+# Grid power mode values
+GRID_POWER_SEPARATE = "separate"   # separate import + export sensors
+GRID_POWER_NET = "net"             # single net-power sensor (P1 meter)
+DEFAULT_GRID_POWER_MODE = GRID_POWER_SEPARATE
 
 # Defaults
 DEFAULT_INTERVAL_MINUTES = 1440
@@ -93,6 +99,7 @@ class SensorSlot:
 SENSOR_SLOTS: list[SensorSlot] = [
     SensorSlot("grid_power_import",   CAT_GRID,        "power",       "W"),
     SensorSlot("grid_power_export",   CAT_GRID,        "power",       "W"),
+    SensorSlot("grid_power_net",      CAT_GRID,        "power_net",   "W"),
     SensorSlot("grid_energy_import",  CAT_GRID,        "energy",      "kWh"),
     SensorSlot("grid_energy_export",  CAT_GRID,        "energy",      "kWh"),
     SensorSlot("solar_power",         CAT_SOLAR,       "power",       "W"),

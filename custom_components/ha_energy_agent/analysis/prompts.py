@@ -82,6 +82,8 @@ def _bundle_section(bundle: "GroupHistoryBundle") -> str:
             header += f" [{s.unit}]"
         if s.role:
             header += f" — role: {s.role}"
+            if s.role == "power_net":
+                header += " (positive = import from grid, negative = export to grid)"
         lines.append(header)
 
         lines.append(f"  Current: {sb.current_state}")
@@ -125,12 +127,13 @@ def _long_term_section(ctx: LongTermContext) -> str:
                     for a in recent
                 )
                 lines.append(f"  Daily (last 7d): {pairs}")
-            elif b.role in ("power", "soc", "temperature"):
+            elif b.role in ("power", "power_net", "soc", "temperature"):
                 pairs = ", ".join(
                     f"{a.date}={a.mean:.1f}" if a.mean is not None else f"{a.date}=?"
                     for a in recent
                 )
-                lines.append(f"  Daily mean (last 7d): {pairs}")
+                note = " (+import/−export)" if b.role == "power_net" else ""
+                lines.append(f"  Daily mean (last 7d){note}: {pairs}")
 
         if b.monthly:
             if b.role == "energy":

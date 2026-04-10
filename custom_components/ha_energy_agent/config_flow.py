@@ -39,6 +39,7 @@ from custom_components.ha_energy_agent.const import (
     DEFAULT_ANTHROPIC_MODEL,
     DEFAULT_FIXED_DAY_RATE,
     DEFAULT_FIXED_NIGHT_RATE,
+    DEFAULT_GRID_POWER_MODE,
     DEFAULT_HISTORY_HOURS,
     DEFAULT_INTERVAL_MINUTES,
     DEFAULT_NORDPOOL_ENTITY_ID,
@@ -46,10 +47,13 @@ from custom_components.ha_energy_agent.const import (
     DEFAULT_OPENAI_MODEL,
     DEFAULT_TARIFF_TYPE,
     DOMAIN,
+    GRID_POWER_NET,
+    GRID_POWER_SEPARATE,
     OPENAI_MODELS,
     OPT_AI_MODEL,
     OPT_FIXED_DAY_RATE,
     OPT_FIXED_NIGHT_RATE,
+    OPT_GRID_POWER_MODE,
     OPT_HISTORY_HOURS,
     OPT_INTERVAL_MINUTES,
     OPT_NORDPOOL_ENTITY_ID,
@@ -125,10 +129,27 @@ def _build_settings_schema(defaults: dict, provider: str) -> vol.Schema:
     )
 
 
-def _build_slot_schema(pre_populated: dict[str, str]) -> vol.Schema:
-    """Build the sensor review schema — one EntitySelector per slot."""
+# Slots that are only shown for a specific grid power mode
+_GRID_SEPARATE_ONLY = {"grid_power_import", "grid_power_export"}
+_GRID_NET_ONLY = {"grid_power_net"}
+
+
+def _build_slot_schema(
+    pre_populated: dict[str, str],
+    grid_power_mode: str = GRID_POWER_SEPARATE,
+) -> vol.Schema:
+    """Build the sensor review schema — one EntitySelector per slot.
+
+    Grid power slots are filtered based on *grid_power_mode*:
+    - ``separate`` → import + export sensors, hide net
+    - ``net``      → net power sensor only, hide import/export
+    """
     fields: dict = {}
     for slot in SENSOR_SLOTS:
+        if slot.key in _GRID_SEPARATE_ONLY and grid_power_mode != GRID_POWER_SEPARATE:
+            continue
+        if slot.key in _GRID_NET_ONLY and grid_power_mode != GRID_POWER_NET:
+            continue
         default = pre_populated.get(slot.key, "")
         fields[vol.Optional(slot.key, default=default)] = EntitySelector(
             EntitySelectorConfig(domain="sensor")
@@ -161,6 +182,7 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._discovery_result: dict = {}
         self._pre_populated_slots: dict[str, str] = {}
         self._selected_slots: dict[str, str] = {}
+        self._grid_power_mode: str = DEFAULT_GRID_POWER_MODE
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -205,7 +227,7 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.FlowResult:
         """Step 2: Run discovery, show summary. No user input needed — just Next."""
         if user_input is not None:
-            return await self.async_step_sensor_review()
+            return await self.async_step_grid_type()
 
         self._discovery_result = await self.hass.async_add_executor_job(
             discover_entities, self.hass
@@ -220,15 +242,40 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={"summary": summary},
         )
 
+    async def async_step_grid_type(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Step 3: Choose grid power measurement mode."""
+        if user_input is not None:
+            self._grid_power_mode = user_input[OPT_GRID_POWER_MODE]
+            return await self.async_step_sensor_review()
+
+        return self.async_show_form(
+            step_id="grid_type",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        OPT_GRID_POWER_MODE, default=self._grid_power_mode
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[GRID_POWER_SEPARATE, GRID_POWER_NET],
+                            mode=SelectSelectorMode.LIST,
+                            translation_key="grid_power_mode",
+                        )
+                    )
+                }
+            ),
+        )
+
     async def async_step_sensor_review(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Step 3: One entity picker per sensor slot, pre-filled by discovery."""
+        """Step 4: One entity picker per sensor slot, pre-filled by discovery."""
         if user_input is not None:
             self._selected_slots = {k: v for k, v in user_input.items() if v}
             return await self.async_step_settings()
 
-        schema = _build_slot_schema(self._pre_populated_slots)
+        schema = _build_slot_schema(self._pre_populated_slots, self._grid_power_mode)
         return self.async_show_form(
             step_id="sensor_review",
             data_schema=schema,
@@ -237,10 +284,11 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Step 4: Interval, history window, AI model, tariff configuration."""
+        """Step 5: Interval, history window, AI model, tariff configuration."""
         if user_input is not None:
             options = _coerce_settings(user_input)
             options[OPT_SELECTED_ENTITIES] = self._selected_slots
+            options[OPT_GRID_POWER_MODE] = self._grid_power_mode
 
             return self.async_create_entry(
                 title="HA Energy Agent",
@@ -269,6 +317,9 @@ class HAEnergyAgentOptionsFlow(config_entries.OptionsFlow):
         self._config_entry = config_entry
         self._discovery_result: dict = {}
         self._pre_populated_slots: dict[str, str] = {}
+        self._grid_power_mode: str = config_entry.options.get(
+            OPT_GRID_POWER_MODE, DEFAULT_GRID_POWER_MODE
+        )
 
         raw = config_entry.options.get(OPT_SELECTED_ENTITIES, {})
         # Backwards compat: old format was dict[str, list[str]] — discard, user re-configures once
@@ -306,7 +357,7 @@ class HAEnergyAgentOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.FlowResult:
         """Re-run discovery."""
         if user_input is not None:
-            return await self.async_step_sensor_review()
+            return await self.async_step_grid_type()
 
         self._discovery_result = await self.hass.async_add_executor_job(
             discover_entities, self.hass
@@ -321,6 +372,31 @@ class HAEnergyAgentOptionsFlow(config_entries.OptionsFlow):
             description_placeholders={"summary": summary},
         )
 
+    async def async_step_grid_type(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Choose grid power measurement mode."""
+        if user_input is not None:
+            self._grid_power_mode = user_input[OPT_GRID_POWER_MODE]
+            return await self.async_step_sensor_review()
+
+        return self.async_show_form(
+            step_id="grid_type",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        OPT_GRID_POWER_MODE, default=self._grid_power_mode
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[GRID_POWER_SEPARATE, GRID_POWER_NET],
+                            mode=SelectSelectorMode.LIST,
+                            translation_key="grid_power_mode",
+                        )
+                    )
+                }
+            ),
+        )
+
     async def async_step_sensor_review(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
@@ -329,7 +405,7 @@ class HAEnergyAgentOptionsFlow(config_entries.OptionsFlow):
             self._selected_slots = {k: v for k, v in user_input.items() if v}
             return await self.async_step_settings()
 
-        schema = _build_slot_schema(self._pre_populated_slots)
+        schema = _build_slot_schema(self._pre_populated_slots, self._grid_power_mode)
         return self.async_show_form(
             step_id="sensor_review",
             data_schema=schema,
@@ -342,6 +418,7 @@ class HAEnergyAgentOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             options = _coerce_settings(user_input)
             options[OPT_SELECTED_ENTITIES] = self._selected_slots
+            options[OPT_GRID_POWER_MODE] = self._grid_power_mode
             return self.async_create_entry(title="", data=options)
 
         provider = self._config_entry.data.get(CONF_AI_PROVIDER, PROVIDER_ANTHROPIC)
