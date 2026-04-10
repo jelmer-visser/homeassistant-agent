@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,40 +11,37 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
-_STATIC_PATH  = "/ha_energy_agent_static"
 _CARD_JS      = "ha-energy-agent-card.js"
-_RESOURCE_URL = f"{_STATIC_PATH}/{_CARD_JS}"
-_WWW_DIR      = Path(__file__).parent / "www"
+_SRC          = Path(__file__).parent / "www" / _CARD_JS
+# /config/www/ is always served at /local/ — no custom static-path needed
+_LOCAL_SUBDIR = "ha_energy_agent"
+_RESOURCE_URL = f"/local/{_LOCAL_SUBDIR}/{_CARD_JS}"
 
 
 async def async_setup_frontend(hass: "HomeAssistant") -> None:
-    """Serve the card JS and register it so Lovelace loads it automatically.
+    """Copy the card JS into /config/www/ and register it with the frontend.
 
-    This function never raises — a frontend setup failure must not prevent
-    the integration from loading.
+    This function never raises — a failure here must not prevent the
+    integration from loading.
     """
-    # Guard: www directory must exist (it may be absent on a partial deploy)
-    if not _WWW_DIR.is_dir():
-        _LOGGER.warning(
-            "Card www directory not found at %s — skipping frontend setup", _WWW_DIR
-        )
+    if not _SRC.exists():
+        _LOGGER.warning("Card JS source not found at %s — skipping frontend setup", _SRC)
         return
 
-    # 1. Serve /ha_energy_agent_static/* from our www/ directory.
-    #    Skip silently if already registered (integration reload).
+    # 1. Copy JS to /config/www/ha_energy_agent/ so it's served at /local/…
     try:
-        try:
-            from homeassistant.components.http import StaticPathConfig  # HA 2023.9+
-            await hass.http.async_register_static_paths(
-                [StaticPathConfig(_STATIC_PATH, str(_WWW_DIR), cache_headers=False)]
-            )
-        except (ImportError, AttributeError):
-            hass.http.register_static_path(_STATIC_PATH, str(_WWW_DIR), False)
+        dst_dir = Path(hass.config.config_dir) / "www" / _LOCAL_SUBDIR
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        dst = dst_dir / _CARD_JS
+        # Only overwrite when the source is newer (avoids unnecessary writes)
+        if not dst.exists() or _SRC.stat().st_mtime > dst.stat().st_mtime:
+            shutil.copy2(_SRC, dst)
+            _LOGGER.info("Copied card JS to %s", dst)
     except Exception as exc:  # noqa: BLE001
-        # "already registered" errors are expected on reload — log at debug level
-        _LOGGER.debug("Static path registration skipped: %s", exc)
+        _LOGGER.warning("Could not copy card JS to www: %s", exc)
+        return
 
-    # 2. Tell the frontend to load our card JS on every Lovelace page.
+    # 2. Register the URL so Lovelace loads it on every page.
     try:
         from homeassistant.components.frontend import add_extra_js_url
         add_extra_js_url(hass, _RESOURCE_URL)
