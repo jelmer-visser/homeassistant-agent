@@ -14,8 +14,8 @@ _DASHBOARD_URL = "ha-energy-agent"
 _STORAGE_KEY = f"lovelace.{_DASHBOARD_URL}"
 _STORAGE_VERSION = 1
 
-
 _SEED_MARKER = "ha_energy_agent_seeded"
+_LOVELACE_DOMAIN = "lovelace"
 
 
 def _build_lovelace_config() -> dict:
@@ -75,7 +75,11 @@ async def async_setup_dashboard(hass: "HomeAssistant", entry: "ConfigEntry") -> 
         existing and existing.get("config", {}).get(_SEED_MARKER)
     )
     if not already_seeded:
-        await store.async_save({"config": _build_lovelace_config()})
+        new_config = _build_lovelace_config()
+        await store.async_save({"config": new_config})
+        # Also patch the in-memory lovelace state so the frontend sees it immediately
+        # without needing a full HA restart.
+        _patch_lovelace_memory(hass, new_config)
 
     try:
         async_register_built_in_panel(
@@ -91,6 +95,25 @@ async def async_setup_dashboard(hass: "HomeAssistant", entry: "ConfigEntry") -> 
         pass  # Panel already registered (e.g. integration reloaded)
 
 
+def _patch_lovelace_memory(hass: "HomeAssistant", config: dict) -> None:
+    """Overwrite the in-memory lovelace dashboard state and notify the frontend.
+
+    LovelaceStorage caches dashboard data in memory; writing to Store alone does not
+    update what the frontend receives via WebSocket.  We reach into the private ``_data``
+    attribute (stable across HA versions that use LovelaceStorage) and fire the standard
+    ``lovelace_updated`` event so connected clients reload the dashboard immediately.
+    """
+    try:
+        lovelace_dashboards = hass.data.get(_LOVELACE_DOMAIN, {}).get("dashboards", {})
+        dashboard_mgr = lovelace_dashboards.get(_DASHBOARD_URL)
+        if dashboard_mgr is not None and hasattr(dashboard_mgr, "_data"):
+            dashboard_mgr._data = {"config": config}
+            hass.bus.async_fire("lovelace_updated", {"url_path": _DASHBOARD_URL})
+            _LOGGER.debug("Patched in-memory lovelace config for %s", _DASHBOARD_URL)
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Could not patch in-memory lovelace config: %s", exc)
+
+
 async def async_remove_dashboard(hass: "HomeAssistant") -> None:
     """Remove the sidebar panel on integration unload."""
     try:
@@ -98,3 +121,12 @@ async def async_remove_dashboard(hass: "HomeAssistant") -> None:
         async_remove_panel(hass, _DASHBOARD_URL)
     except Exception as exc:  # noqa: BLE001
         _LOGGER.debug("Could not remove dashboard panel: %s", exc)
+
+    # Remove the lovelace dashboard instance so it is recreated fresh on next setup,
+    # ensuring the in-memory state is re-read from storage rather than from cache.
+    try:
+        hass.data.get(_LOVELACE_DOMAIN, {}).get("dashboards", {}).pop(
+            _DASHBOARD_URL, None
+        )
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Could not remove lovelace dashboard instance: %s", exc)
