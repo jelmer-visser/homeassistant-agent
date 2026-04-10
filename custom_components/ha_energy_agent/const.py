@@ -23,6 +23,8 @@ ANTHROPIC_MODELS = [
 OPENAI_MODELS = [
     "gpt-4o-mini",
     "gpt-4o",
+    "gpt-4.1-nano",
+    "gpt-4.1-mini",
     "gpt-4.1",
     "o4-mini",
 ]

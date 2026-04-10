@@ -163,9 +163,11 @@
         "claude-haiku-4-5-20251001": "Claude Haiku 4.5 (fastest, cheapest)",
         "claude-sonnet-4-6": "Claude Sonnet 4.6 (recommended)",
         "claude-opus-4-6": "Claude Opus 4.6 (most capable)",
-        "gpt-4o-mini": "GPT-4o mini (fastest, cheapest)",
-        "gpt-4o": "GPT-4o (recommended)",
-        "gpt-4.1": "GPT-4.1 (most capable)",
+        "gpt-4o-mini": "GPT-4o mini",
+        "gpt-4o": "GPT-4o",
+        "gpt-4.1-nano": "GPT-4.1 nano (fastest, cheapest)",
+        "gpt-4.1-mini": "GPT-4.1 mini",
+        "gpt-4.1": "GPT-4.1 (recommended)",
         "o4-mini": "o4-mini (reasoning model)"
       }
     }
