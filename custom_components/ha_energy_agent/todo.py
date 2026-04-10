@@ -116,6 +116,15 @@ class EnergyTipsTodoList(CoordinatorEntity["EnergyAgentCoordinator"], TodoListEn
         self.async_write_ha_state()
 
     # ------------------------------------------------------------------
+    # Availability — always True; tips are persisted so the list is
+    # always usable even when the coordinator (AI API) is offline.
+    # ------------------------------------------------------------------
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    # ------------------------------------------------------------------
     # CoordinatorEntity hook
     # ------------------------------------------------------------------
 
