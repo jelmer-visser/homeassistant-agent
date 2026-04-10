@@ -27,8 +27,8 @@ async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    from custom_components.ha_energy_agent.dashboard import async_setup_dashboard
-    await async_setup_dashboard(hass, entry)
+    from custom_components.ha_energy_agent.frontend import async_setup_frontend
+    await async_setup_frontend(hass)
 
     async def _handle_run_now(call: ServiceCall) -> None:
         for coord in hass.data.get(DOMAIN, {}).values():
@@ -62,9 +62,6 @@ async def async_unload_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> boo
         hass.data[DOMAIN].pop(entry.entry_id, None)
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, SERVICE_RUN_NOW)
-
-    from custom_components.ha_energy_agent.dashboard import async_remove_dashboard
-    await async_remove_dashboard(hass)
 
     return unload_ok
 
