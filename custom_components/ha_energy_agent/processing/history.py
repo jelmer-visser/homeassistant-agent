@@ -253,7 +253,7 @@ async def fetch_long_term_context(
 
     def _to_agg(row: dict, fmt: str) -> StatAggregate:
         return StatAggregate(
-            date=row["start"].strftime(fmt),
+            date=datetime.fromtimestamp(row["start"], tz=timezone.utc).strftime(fmt),
             mean=row.get("mean"),
             min=row.get("min"),
             max=row.get("max"),
