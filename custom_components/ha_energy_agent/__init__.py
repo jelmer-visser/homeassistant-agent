@@ -27,8 +27,11 @@ async def async_setup_entry(hass: "HomeAssistant", entry: "ConfigEntry") -> bool
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    from custom_components.ha_energy_agent.frontend import async_setup_frontend
-    await async_setup_frontend(hass)
+    try:
+        from custom_components.ha_energy_agent.frontend import async_setup_frontend
+        await async_setup_frontend(hass)
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning("Frontend card setup failed (non-fatal): %s", exc)
 
     async def _handle_run_now(call: ServiceCall) -> None:
         for coord in hass.data.get(DOMAIN, {}).values():
