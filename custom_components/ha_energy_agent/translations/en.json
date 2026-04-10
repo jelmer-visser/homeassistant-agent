@@ -126,9 +126,11 @@
   "selector": {
     "interval_minutes": {
       "options": {
-        "15": "Every 15 minutes",
-        "30": "Every 30 minutes",
-        "60": "Every hour"
+        "30": "Every 30 minutes (testing)",
+        "60": "Every hour",
+        "360": "Every 6 hours",
+        "720": "Every 12 hours",
+        "1440": "Once daily (recommended)"
       }
     },
     "history_hours": {

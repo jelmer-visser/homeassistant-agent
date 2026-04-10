@@ -92,7 +92,7 @@ def _build_settings_schema(defaults: dict, provider: str) -> vol.Schema:
             ),
             vol.Required(OPT_INTERVAL_MINUTES, default=defaults.get(OPT_INTERVAL_MINUTES, DEFAULT_INTERVAL_MINUTES)): SelectSelector(
                 SelectSelectorConfig(
-                    options=["15", "30", "60"],
+                    options=["30", "60", "360", "720", "1440"],
                     mode=SelectSelectorMode.LIST,
                     translation_key="interval_minutes",
                 )
