@@ -62,7 +62,19 @@ async def async_setup_dashboard(hass: "HomeAssistant", entry: "ConfigEntry") -> 
 
     store = Store(hass, _STORAGE_VERSION, _STORAGE_KEY)
     existing = await store.async_load()
-    if not existing:
+
+    # Seed our cards if the dashboard doesn't exist yet, or if HA auto-generated
+    # an empty default (e.g. user visited the panel before setup finished — shows
+    # as "New section" with no cards).
+    config_has_cards = bool(
+        existing
+        and any(
+            card
+            for view in existing.get("config", {}).get("views", [])
+            for card in view.get("cards", [])
+        )
+    )
+    if not config_has_cards:
         await store.async_save({"config": _build_lovelace_config()})
 
     try:
