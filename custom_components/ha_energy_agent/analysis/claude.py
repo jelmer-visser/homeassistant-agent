@@ -1,0 +1,68 @@
+"""Anthropic Claude API client wrapper for HA Energy Agent."""
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from custom_components.ha_energy_agent.models import (
+    AnalysisResult,
+    GroupHistoryBundle,
+    PricingContext,
+)
+from custom_components.ha_energy_agent.analysis.parser import parse_claude_response
+from custom_components.ha_energy_agent.analysis.prompts import (
+    SYSTEM_PROMPT,
+    build_user_message,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+_MAX_TOKENS = 4096
+
+
+class ClaudeAnalysisClient:
+    """Thin async wrapper around the Anthropic Python SDK."""
+
+    def __init__(self, api_key: str, model: str) -> None:
+        self._api_key = api_key
+        self._model = model
+        self._client = None
+
+    def _create_client(self):
+        import anthropic
+        return anthropic.AsyncAnthropic(api_key=self._api_key)
+
+    async def _get_client(self):
+        if self._client is None:
+            import asyncio
+            loop = asyncio.get_running_loop()
+            self._client = await loop.run_in_executor(None, self._create_client)
+        return self._client
+
+    async def analyse(
+        self,
+        bundles: list[GroupHistoryBundle],
+        pricing: Optional[PricingContext],
+        history_hours: int,
+    ) -> AnalysisResult:
+        """Run one analysis cycle and return a validated AnalysisResult."""
+        user_message = build_user_message(bundles, pricing, history_hours)
+
+        _LOGGER.debug("Sending %d chars to Claude (%s)", len(user_message), self._model)
+
+        client = await self._get_client()
+        response = await client.messages.create(
+            model=self._model,
+            max_tokens=_MAX_TOKENS,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_message}],
+        )
+
+        raw_text: str = response.content[0].text
+        _LOGGER.debug("Received %d chars from Claude", len(raw_text))
+
+        try:
+            return parse_claude_response(raw_text)
+        except ValueError as exc:
+            _LOGGER.error("Failed to parse Claude response: %s\nRaw: %.500s", exc, raw_text)
+            raise

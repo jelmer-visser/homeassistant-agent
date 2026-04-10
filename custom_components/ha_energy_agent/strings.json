@@ -1,0 +1,137 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "HA Energy Agent — AI Provider",
+        "description": "Select your AI provider and enter the corresponding API key.",
+        "data": {
+          "ai_provider": "AI Provider",
+          "ai_api_key": "API Key"
+        }
+      },
+      "discover": {
+        "title": "Discovering energy entities",
+        "description": "HA Energy Agent has scanned your entities:\n\n{summary}\n\nClick Submit to review and confirm the entity list."
+      },
+      "sensor_review": {
+        "title": "Confirm entity selection",
+        "description": "Deselect any entities you do not want included in the analysis. Entities are grouped by category.",
+        "data": {
+          "grid": "Grid sensors",
+          "solar": "Solar sensors",
+          "battery": "Battery sensors",
+          "heat_pump": "Heat pump sensors",
+          "temperature": "Temperature sensors",
+          "pricing": "Pricing sensors"
+        }
+      },
+      "settings": {
+        "title": "Analysis settings",
+        "data": {
+          "ai_model": "AI Model",
+          "interval_minutes": "Analysis interval",
+          "history_hours": "History window",
+          "tariff_type": "Electricity tariff type",
+          "fixed_day_rate": "Day rate (€/kWh)",
+          "fixed_night_rate": "Night rate (€/kWh)",
+          "nordpool_entity_id": "Nord Pool / dynamic price sensor (optional)",
+          "notify_ha": "Send analysis results as HA notifications"
+        }
+      }
+    },
+    "error": {
+      "invalid_anthropic_key": "Anthropic API key must start with 'sk-ant-'. Please check and try again.",
+      "invalid_openai_key": "OpenAI API key must start with 'sk-'. Please check and try again."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "HA Energy Agent options",
+        "data": {
+          "action": "What would you like to do?"
+        }
+      },
+      "discover": {
+        "title": "Re-discover energy entities",
+        "description": "Scanning your entities again:\n\n{summary}\n\nClick Submit to review the new list."
+      },
+      "sensor_review": {
+        "title": "Update entity selection",
+        "description": "Adjust which entities are included in the analysis.",
+        "data": {
+          "grid": "Grid sensors",
+          "solar": "Solar sensors",
+          "battery": "Battery sensors",
+          "heat_pump": "Heat pump sensors",
+          "temperature": "Temperature sensors",
+          "pricing": "Pricing sensors"
+        }
+      },
+      "settings": {
+        "title": "Update analysis settings",
+        "data": {
+          "ai_model": "AI Model",
+          "interval_minutes": "Analysis interval",
+          "history_hours": "History window",
+          "tariff_type": "Electricity tariff type",
+          "fixed_day_rate": "Day rate (€/kWh)",
+          "fixed_night_rate": "Night rate (€/kWh)",
+          "nordpool_entity_id": "Nord Pool / dynamic price sensor (optional)",
+          "notify_ha": "Send analysis results as HA notifications"
+        }
+      }
+    }
+  },
+  "selector": {
+    "interval_minutes": {
+      "options": {
+        "15": "Every 15 minutes",
+        "30": "Every 30 minutes",
+        "60": "Every hour"
+      }
+    },
+    "history_hours": {
+      "options": {
+        "12": "Last 12 hours",
+        "24": "Last 24 hours",
+        "48": "Last 48 hours"
+      }
+    },
+    "tariff_type": {
+      "options": {
+        "fixed": "Fixed rate",
+        "dynamic": "Dynamic (Nord Pool)"
+      }
+    },
+    "options_action": {
+      "options": {
+        "settings": "Change settings",
+        "rediscover": "Re-discover entities"
+      }
+    },
+    "ai_provider": {
+      "options": {
+        "anthropic": "Anthropic (Claude)",
+        "openai": "OpenAI (ChatGPT)"
+      }
+    },
+    "ai_model": {
+      "options": {
+        "claude-haiku-4-5-20251001": "Claude Haiku 4.5 (fastest, cheapest)",
+        "claude-sonnet-4-6": "Claude Sonnet 4.6 (recommended)",
+        "claude-opus-4-6": "Claude Opus 4.6 (most capable)",
+        "gpt-4o-mini": "GPT-4o mini (fastest, cheapest)",
+        "gpt-4o": "GPT-4o (recommended)",
+        "gpt-4.1": "GPT-4.1 (most capable)",
+        "o4-mini": "o4-mini (reasoning model)"
+      }
+    }
+  },
+  "services": {
+    "run_analysis_now": {
+      "name": "Run analysis now",
+      "description": "Trigger an immediate energy analysis cycle, bypassing the scheduled interval."
+    }
+  }
+}
