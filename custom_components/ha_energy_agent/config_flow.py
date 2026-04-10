@@ -3,7 +3,7 @@
 Steps:
   1. user (credentials) — AI provider + API key
   2. discover           — auto-scan HA entities (no user input, shows summary)
-  3. sensor_review      — per-group multi-select to confirm/deselect entities
+  3. sensor_review      — one entity picker per sensor slot, pre-filled by discovery
   4. settings           — interval, history window, AI model, tariff, notification
 
 OptionsFlow lets the user re-run discovery or change settings post-setup.
@@ -33,7 +33,6 @@ from homeassistant.helpers.selector import (
 )
 
 from custom_components.ha_energy_agent.const import (
-    ALL_CATEGORIES,
     ANTHROPIC_MODELS,
     CONF_AI_API_KEY,
     CONF_AI_PROVIDER,
@@ -59,13 +58,15 @@ from custom_components.ha_energy_agent.const import (
     OPT_TARIFF_TYPE,
     PROVIDER_ANTHROPIC,
     PROVIDER_OPENAI,
+    SENSOR_SLOTS,
 )
-from custom_components.ha_energy_agent.discovery import discover_entities, discovery_summary
+from custom_components.ha_energy_agent.discovery import (
+    _pre_populate_slots,
+    discover_entities,
+    discovery_summary,
+)
 
 _LOGGER = logging.getLogger(__name__)
-
-# Stored temporarily across flow steps in self._discovery_result
-_DISCOVERY_KEY = "_discovery"
 
 
 def _models_for_provider(provider: str) -> list[str]:
@@ -124,25 +125,13 @@ def _build_settings_schema(defaults: dict, provider: str) -> vol.Schema:
     )
 
 
-def _build_review_schema(discovered: dict) -> vol.Schema:
-    """Build the sensor review schema — one multi-select field per category."""
+def _build_slot_schema(pre_populated: dict[str, str]) -> vol.Schema:
+    """Build the sensor review schema — one EntitySelector per slot."""
     fields: dict = {}
-    for cat in ALL_CATEGORIES:
-        sensors = discovered.get(cat, [])
-        if not sensors:
-            continue
-        options = [
-            {"value": s.entity_id, "label": f"{s.name} ({s.entity_id})"}
-            for s in sensors
-        ]
-        # All entities pre-selected
-        default_selected = [s.entity_id for s in sensors]
-        fields[vol.Optional(cat, default=default_selected)] = SelectSelector(
-            SelectSelectorConfig(
-                options=options,
-                multiple=True,
-                mode=SelectSelectorMode.LIST,
-            )
+    for slot in SENSOR_SLOTS:
+        default = pre_populated.get(slot.key, "")
+        fields[vol.Optional(slot.key, default=default)] = EntitySelector(
+            EntitySelectorConfig(domain="sensor")
         )
     return vol.Schema(fields)
 
@@ -170,6 +159,8 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._provider: str = PROVIDER_ANTHROPIC
         self._api_key: str = ""
         self._discovery_result: dict = {}
+        self._pre_populated_slots: dict[str, str] = {}
+        self._selected_slots: dict[str, str] = {}
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -216,11 +207,11 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return await self.async_step_sensor_review()
 
-        # Run discovery
         self._discovery_result = await self.hass.async_add_executor_job(
             discover_entities, self.hass
         )
-        summary = discovery_summary(self._discovery_result)
+        self._pre_populated_slots = _pre_populate_slots(self._discovery_result)
+        summary = discovery_summary(self._discovery_result, self._pre_populated_slots)
         _LOGGER.info("Discovery complete: %s", summary)
 
         return self.async_show_form(
@@ -232,16 +223,12 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_sensor_review(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Step 3: Full entity list with individual checkboxes per group."""
+        """Step 3: One entity picker per sensor slot, pre-filled by discovery."""
         if user_input is not None:
-            # user_input maps category → list[entity_id]
-            selected: dict[str, list[str]] = {
-                cat: user_input.get(cat, []) for cat in ALL_CATEGORIES
-            }
-            self._selected_entities = selected
+            self._selected_slots = {k: v for k, v in user_input.items() if v}
             return await self.async_step_settings()
 
-        schema = _build_review_schema(self._discovery_result)
+        schema = _build_slot_schema(self._pre_populated_slots)
         return self.async_show_form(
             step_id="sensor_review",
             data_schema=schema,
@@ -253,7 +240,7 @@ class HAEnergyAgentConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Step 4: Interval, history window, AI model, tariff configuration."""
         if user_input is not None:
             options = _coerce_settings(user_input)
-            options[OPT_SELECTED_ENTITIES] = self._selected_entities
+            options[OPT_SELECTED_ENTITIES] = self._selected_slots
 
             return self.async_create_entry(
                 title="HA Energy Agent",
@@ -281,9 +268,14 @@ class HAEnergyAgentOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
         self._discovery_result: dict = {}
-        self._selected_entities: dict[str, list[str]] = config_entry.options.get(
-            OPT_SELECTED_ENTITIES, {}
-        )
+        self._pre_populated_slots: dict[str, str] = {}
+
+        raw = config_entry.options.get(OPT_SELECTED_ENTITIES, {})
+        # Backwards compat: old format was dict[str, list[str]] — discard, user re-configures once
+        if raw and isinstance(next(iter(raw.values())), list):
+            self._selected_slots: dict[str, str] = {}
+        else:
+            self._selected_slots = dict(raw)
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -319,7 +311,10 @@ class HAEnergyAgentOptionsFlow(config_entries.OptionsFlow):
         self._discovery_result = await self.hass.async_add_executor_job(
             discover_entities, self.hass
         )
-        summary = discovery_summary(self._discovery_result)
+        self._pre_populated_slots = _pre_populate_slots(
+            self._discovery_result, self._selected_slots
+        )
+        summary = discovery_summary(self._discovery_result, self._pre_populated_slots)
         return self.async_show_form(
             step_id="discover",
             data_schema=vol.Schema({}),
@@ -329,36 +324,12 @@ class HAEnergyAgentOptionsFlow(config_entries.OptionsFlow):
     async def async_step_sensor_review(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Entity selection."""
+        """Entity slot selection."""
         if user_input is not None:
-            self._selected_entities = {
-                cat: user_input.get(cat, []) for cat in ALL_CATEGORIES
-            }
+            self._selected_slots = {k: v for k, v in user_input.items() if v}
             return await self.async_step_settings()
 
-        # Pre-populate with previously selected entities (merged with newly discovered)
-        merged: dict = {}
-        for cat in ALL_CATEGORIES:
-            prev = set(self._selected_entities.get(cat, []))
-            new = {s.entity_id for s in self._discovery_result.get(cat, [])}
-            # All new + all previously selected (may have extras not in discovery)
-            combined_ids = list(new | prev)
-            # Build DiscoveredSensor list for schema
-            discovered_in_cat = {s.entity_id: s for s in self._discovery_result.get(cat, [])}
-            sensors = [
-                discovered_in_cat[eid]
-                if eid in discovered_in_cat
-                else _stub_sensor(eid, cat, self.hass)
-                for eid in combined_ids
-            ]
-            merged[cat] = sensors
-
-        schema = _build_review_schema(merged)
-        # Pre-select previously selected entities
-        defaults: dict = {
-            cat: self._selected_entities.get(cat, [s.entity_id for s in merged.get(cat, [])])
-            for cat in ALL_CATEGORIES
-        }
+        schema = _build_slot_schema(self._pre_populated_slots)
         return self.async_show_form(
             step_id="sensor_review",
             data_schema=schema,
@@ -370,29 +341,12 @@ class HAEnergyAgentOptionsFlow(config_entries.OptionsFlow):
         """Change settings."""
         if user_input is not None:
             options = _coerce_settings(user_input)
-            options[OPT_SELECTED_ENTITIES] = self._selected_entities
+            options[OPT_SELECTED_ENTITIES] = self._selected_slots
             return self.async_create_entry(title="", data=options)
 
-        # Derive provider for model list (backward compat: old entries default to anthropic)
         provider = self._config_entry.data.get(CONF_AI_PROVIDER, PROVIDER_ANTHROPIC)
         schema = _build_settings_schema(self._config_entry.options, provider)
         return self.async_show_form(
             step_id="settings",
             data_schema=schema,
         )
-
-
-def _stub_sensor(entity_id: str, category: str, hass: Any):
-    """Create a minimal DiscoveredSensor for a previously selected entity no longer in discovery."""
-    from custom_components.ha_energy_agent.discovery import _entity_id_to_name
-    from custom_components.ha_energy_agent.models import DiscoveredSensor
-
-    state = hass.states.get(entity_id)
-    attrs = state.attributes if state else {}
-    return DiscoveredSensor(
-        entity_id=entity_id,
-        name=attrs.get("friendly_name") or _entity_id_to_name(entity_id),
-        unit=attrs.get("unit_of_measurement") or "",
-        category=category,
-        score=0,
-    )

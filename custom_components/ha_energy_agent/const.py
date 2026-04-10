@@ -76,3 +76,33 @@ CAT_TEMPERATURE = "temperature"
 CAT_PRICING = "pricing"
 
 ALL_CATEGORIES = [CAT_GRID, CAT_SOLAR, CAT_BATTERY, CAT_HEAT_PUMP, CAT_TEMPERATURE, CAT_PRICING]
+
+
+# Sensor slots — fixed set of named inputs for the AI pipeline
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class SensorSlot:
+    key: str
+    category: str
+    role: str
+    unit_hint: str
+
+
+SENSOR_SLOTS: list[SensorSlot] = [
+    SensorSlot("grid_power_import",   CAT_GRID,        "power",       "W"),
+    SensorSlot("grid_power_export",   CAT_GRID,        "power",       "W"),
+    SensorSlot("grid_energy_import",  CAT_GRID,        "energy",      "kWh"),
+    SensorSlot("grid_energy_export",  CAT_GRID,        "energy",      "kWh"),
+    SensorSlot("solar_power",         CAT_SOLAR,       "power",       "W"),
+    SensorSlot("solar_energy_today",  CAT_SOLAR,       "energy",      "kWh"),
+    SensorSlot("battery_soc",         CAT_BATTERY,     "soc",         "%"),
+    SensorSlot("battery_power",       CAT_BATTERY,     "power",       "W"),
+    SensorSlot("heat_pump_power",     CAT_HEAT_PUMP,   "power",       "W"),
+    SensorSlot("heat_pump_cop",       CAT_HEAT_PUMP,   "efficiency",  ""),
+    SensorSlot("outdoor_temperature", CAT_TEMPERATURE, "temperature", "°C"),
+    SensorSlot("indoor_temperature",  CAT_TEMPERATURE, "temperature", "°C"),
+]
+
+SLOTS_BY_KEY: dict[str, SensorSlot] = {s.key: s for s in SENSOR_SLOTS}

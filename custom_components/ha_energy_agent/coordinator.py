@@ -126,7 +126,7 @@ class EnergyAgentCoordinator(DataUpdateCoordinator[AgentCycleResult]):
         notify_ha: bool = bool(opts.get(OPT_NOTIFY_HA, DEFAULT_NOTIFY_HA))
 
         # 1. Build sensor groups from user selection
-        selected: dict[str, list[str]] = opts.get(OPT_SELECTED_ENTITIES, {})
+        selected: dict[str, str] = opts.get(OPT_SELECTED_ENTITIES, {})
         groups = build_sensor_groups(selected, self.hass)
 
         if not groups:

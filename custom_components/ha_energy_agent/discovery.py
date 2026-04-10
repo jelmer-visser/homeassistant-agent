@@ -21,6 +21,8 @@ from custom_components.ha_energy_agent.const import (
     CAT_PRICING,
     CAT_SOLAR,
     CAT_TEMPERATURE,
+    SENSOR_SLOTS,
+    SLOTS_BY_KEY,
 )
 from custom_components.ha_energy_agent.models import DiscoveredSensor, SensorGroup
 
@@ -322,54 +324,86 @@ def _entity_id_to_name(entity_id: str) -> str:
     return name_part.replace("_", " ").title()
 
 
+def _pre_populate_slots(
+    discovered: dict[str, list[DiscoveredSensor]],
+    existing: Optional[dict[str, str]] = None,
+) -> dict[str, str]:
+    """
+    Return a slot_key → entity_id mapping pre-filled from discovery results.
+
+    For each slot, pick the highest-scoring sensor in the matching category
+    whose role matches the slot role. Existing assignments always take precedence
+    and are never overwritten.
+    """
+    result: dict[str, str] = {}
+    existing = existing or {}
+
+    for slot in SENSOR_SLOTS:
+        if slot.key in existing and existing[slot.key]:
+            result[slot.key] = existing[slot.key]
+            continue
+
+        candidates = discovered.get(slot.category, [])
+        # Find best match: role must match, then highest score
+        best: Optional[DiscoveredSensor] = None
+        for sensor in candidates:
+            if sensor.role == slot.role:
+                if best is None or sensor.score > best.score:
+                    best = sensor
+        if best is not None:
+            result[slot.key] = best.entity_id
+
+    return result
+
+
 def build_sensor_groups(
-    selected: dict[str, list[str]],
+    selected: dict[str, str],
     hass: "HomeAssistant",
 ) -> list[SensorGroup]:
     """
-    Build SensorGroup list from the user-confirmed entity selection.
+    Build SensorGroup list from the user-confirmed slot assignments.
 
-    `selected` maps category → list of entity_ids the user kept.
-    We fetch current HA attributes to fill in name/unit/role.
+    `selected` maps slot_key → entity_id.
+    Role and category are read from SLOTS_BY_KEY — no inference needed.
+    Missing or unavailable entities are silently skipped.
     """
-    from homeassistant.helpers import entity_registry as er
+    groups_map: dict[str, list[DiscoveredSensor]] = {c: [] for c in ALL_CATEGORIES}
 
-    entity_reg = er.async_get(hass)
-    groups: list[SensorGroup] = []
-
-    for category in ALL_CATEGORIES:
-        entity_ids = selected.get(category, [])
-        if not entity_ids:
+    for slot_key, entity_id in selected.items():
+        if not entity_id:
             continue
+        slot = SLOTS_BY_KEY.get(slot_key)
+        if slot is None:
+            continue
+        state = hass.states.get(entity_id)
+        if state is None:
+            continue
+        attrs = state.attributes or {}
+        friendly_name = attrs.get("friendly_name") or _entity_id_to_name(entity_id)
+        unit = attrs.get("unit_of_measurement") or slot.unit_hint
+        is_binary = entity_id.startswith("binary_sensor.")
 
-        sensors: list[DiscoveredSensor] = []
-        for eid in entity_ids:
-            state = hass.states.get(eid)
-            if state is None:
-                continue
-            attrs = state.attributes or {}
-            friendly_name = attrs.get("friendly_name") or _entity_id_to_name(eid)
-            unit = attrs.get("unit_of_measurement") or ""
-            device_class = attrs.get("device_class")
-            is_binary = eid.startswith("binary_sensor.")
-            role = _infer_role(eid, category, device_class, unit)
+        groups_map[slot.category].append(DiscoveredSensor(
+            entity_id=entity_id,
+            name=friendly_name,
+            unit=unit,
+            role=slot.role,
+            category=slot.category,
+            is_binary=is_binary,
+            score=0,
+        ))
 
-            sensors.append(DiscoveredSensor(
-                entity_id=eid,
-                name=friendly_name,
-                unit=unit,
-                role=role,
-                category=category,
-                is_binary=is_binary,
-                score=0,
-            ))
-
-        groups.append(SensorGroup(label=category, sensors=sensors))
-
-    return groups
+    return [
+        SensorGroup(label=cat, sensors=sensors)
+        for cat, sensors in groups_map.items()
+        if sensors
+    ]
 
 
-def discovery_summary(discovered: dict[str, list[DiscoveredSensor]]) -> str:
+def discovery_summary(
+    discovered: dict[str, list[DiscoveredSensor]],
+    pre_populated: Optional[dict[str, str]] = None,
+) -> str:
     """Human-readable summary of discovery results for the config flow UI."""
     parts = []
     for cat in ALL_CATEGORIES:
@@ -379,4 +413,8 @@ def discovery_summary(discovered: dict[str, list[DiscoveredSensor]]) -> str:
             parts.append(f"{n} {label}")
     if not parts:
         return "No relevant energy entities found."
-    return "Found: " + ", ".join(parts) + "."
+    summary = "Found: " + ", ".join(parts) + "."
+    if pre_populated is not None:
+        filled = sum(1 for v in pre_populated.values() if v)
+        summary += f" Pre-filled {filled}/{len(SENSOR_SLOTS)} slots."
+    return summary

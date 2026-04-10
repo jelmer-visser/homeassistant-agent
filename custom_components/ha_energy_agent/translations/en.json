@@ -14,15 +14,35 @@
         "description": "HA Energy Agent has scanned your entities:\n\n{summary}\n\nClick Submit to review and confirm the entity list."
       },
       "sensor_review": {
-        "title": "Confirm entity selection",
-        "description": "Deselect any entities you do not want included in the analysis. Entities are grouped by category.",
+        "title": "Assign sensor slots",
+        "description": "All slots are optional — leave empty what you don't have. Discovery has pre-filled its best guesses.",
         "data": {
-          "grid": "Grid sensors",
-          "solar": "Solar sensors",
-          "battery": "Battery sensors",
-          "heat_pump": "Heat pump sensors",
-          "temperature": "Temperature sensors",
-          "pricing": "Pricing sensors"
+          "grid_power_import": "Grid power import",
+          "grid_power_export": "Grid power export",
+          "grid_energy_import": "Grid energy import (today)",
+          "grid_energy_export": "Grid energy export (today)",
+          "solar_power": "Solar power (current)",
+          "solar_energy_today": "Solar energy (today)",
+          "battery_soc": "Battery state of charge",
+          "battery_power": "Battery power (charge/discharge)",
+          "heat_pump_power": "Heat pump power consumption",
+          "heat_pump_cop": "Heat pump COP / efficiency",
+          "outdoor_temperature": "Outdoor temperature",
+          "indoor_temperature": "Indoor temperature"
+        },
+        "data_description": {
+          "grid_power_import": "Current power drawn from the grid (W)",
+          "grid_power_export": "Current power fed back to the grid (W)",
+          "grid_energy_import": "Total energy imported from the grid today (kWh)",
+          "grid_energy_export": "Total energy exported to the grid today (kWh)",
+          "solar_power": "Current solar panel output power (W)",
+          "solar_energy_today": "Total solar energy produced today (kWh)",
+          "battery_soc": "Battery charge level (0–100 %)",
+          "battery_power": "Battery charge (+) or discharge (−) power (W)",
+          "heat_pump_power": "Heat pump electrical power consumption (W)",
+          "heat_pump_cop": "Coefficient of performance (dimensionless)",
+          "outdoor_temperature": "Outside air temperature (°C)",
+          "indoor_temperature": "Inside / room temperature (°C)"
         }
       },
       "settings": {
@@ -57,15 +77,35 @@
         "description": "Scanning your entities again:\n\n{summary}\n\nClick Submit to review the new list."
       },
       "sensor_review": {
-        "title": "Update entity selection",
-        "description": "Adjust which entities are included in the analysis.",
+        "title": "Update sensor slots",
+        "description": "All slots are optional — leave empty what you don't have. Discovery has pre-filled its best guesses.",
         "data": {
-          "grid": "Grid sensors",
-          "solar": "Solar sensors",
-          "battery": "Battery sensors",
-          "heat_pump": "Heat pump sensors",
-          "temperature": "Temperature sensors",
-          "pricing": "Pricing sensors"
+          "grid_power_import": "Grid power import",
+          "grid_power_export": "Grid power export",
+          "grid_energy_import": "Grid energy import (today)",
+          "grid_energy_export": "Grid energy export (today)",
+          "solar_power": "Solar power (current)",
+          "solar_energy_today": "Solar energy (today)",
+          "battery_soc": "Battery state of charge",
+          "battery_power": "Battery power (charge/discharge)",
+          "heat_pump_power": "Heat pump power consumption",
+          "heat_pump_cop": "Heat pump COP / efficiency",
+          "outdoor_temperature": "Outdoor temperature",
+          "indoor_temperature": "Indoor temperature"
+        },
+        "data_description": {
+          "grid_power_import": "Current power drawn from the grid (W)",
+          "grid_power_export": "Current power fed back to the grid (W)",
+          "grid_energy_import": "Total energy imported from the grid today (kWh)",
+          "grid_energy_export": "Total energy exported to the grid today (kWh)",
+          "solar_power": "Current solar panel output power (W)",
+          "solar_energy_today": "Total solar energy produced today (kWh)",
+          "battery_soc": "Battery charge level (0–100 %)",
+          "battery_power": "Battery charge (+) or discharge (−) power (W)",
+          "heat_pump_power": "Heat pump electrical power consumption (W)",
+          "heat_pump_cop": "Coefficient of performance (dimensionless)",
+          "outdoor_temperature": "Outside air temperature (°C)",
+          "indoor_temperature": "Inside / room temperature (°C)"
         }
       },
       "settings": {
