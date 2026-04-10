@@ -60,7 +60,7 @@ class OpenAIAnalysisClient:
 
         kwargs: dict = dict(
             model=self._model,
-            max_tokens=_MAX_TOKENS,
+            max_completion_tokens=_MAX_TOKENS,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
