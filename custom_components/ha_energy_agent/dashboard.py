@@ -15,8 +15,12 @@ _STORAGE_KEY = f"lovelace.{_DASHBOARD_URL}"
 _STORAGE_VERSION = 1
 
 
+_SEED_MARKER = "ha_energy_agent_seeded"
+
+
 def _build_lovelace_config() -> dict:
     return {
+        _SEED_MARKER: True,  # Marker so we know we seeded this — never overwrite after this
         "title": "Energy Agent",
         "views": [
             {
@@ -63,18 +67,14 @@ async def async_setup_dashboard(hass: "HomeAssistant", entry: "ConfigEntry") -> 
     store = Store(hass, _STORAGE_VERSION, _STORAGE_KEY)
     existing = await store.async_load()
 
-    # Seed our cards if the dashboard doesn't exist yet, or if HA auto-generated
-    # an empty default (e.g. user visited the panel before setup finished — shows
-    # as "New section" with no cards).
-    config_has_cards = bool(
-        existing
-        and any(
-            card
-            for view in existing.get("config", {}).get("views", [])
-            for card in view.get("cards", [])
-        )
+    # Only seed when our marker is absent. This handles three cases:
+    # 1. Fresh install — no storage yet → seed.
+    # 2. HA auto-created a default ("New section") before we ran → no marker → seed.
+    # 3. User previously customised the dashboard → marker present → leave it alone.
+    already_seeded = bool(
+        existing and existing.get("config", {}).get(_SEED_MARKER)
     )
-    if not config_has_cards:
+    if not already_seeded:
         await store.async_save({"config": _build_lovelace_config()})
 
     try:
