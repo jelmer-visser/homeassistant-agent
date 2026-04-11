@@ -187,8 +187,27 @@ async def fetch_history_bundles(
 
             resampled = _resample(points, max_points)
             numeric_values = [p.value for p in resampled]
-            stats = _compute_stats(numeric_values)
-            anomalies = _detect_anomalies(sensor, numeric_values, stats) if stats else []
+
+            # For efficiency sensors (COP etc.) a value of 0 means the device
+            # is off, not a real efficiency reading. Compute stats on active
+            # (non-zero) samples only; add an informational note about duty cycle.
+            if sensor.role == "efficiency":
+                active_values = [v for v in numeric_values if v > 0]
+                idle_pct = (
+                    round(100 * (len(numeric_values) - len(active_values)) / len(numeric_values))
+                    if numeric_values else 0
+                )
+                stats = _compute_stats(active_values)
+                anomalies = _detect_anomalies(sensor, active_values, stats) if stats else []
+                if numeric_values:
+                    note = (
+                        f"{sensor.name}: device was idle (value=0) for "
+                        f"{idle_pct}% of the window; stats reflect active periods only"
+                    )
+                    anomalies.insert(0, note)
+            else:
+                stats = _compute_stats(numeric_values)
+                anomalies = _detect_anomalies(sensor, numeric_values, stats) if stats else []
 
             bundles.append(
                 SensorHistoryBundle(
