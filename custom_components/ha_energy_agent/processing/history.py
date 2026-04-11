@@ -67,9 +67,21 @@ def _detect_anomalies(sensor: DiscoveredSensor, values: list[float], stats: Sens
     if not values or stats is None:
         return anomalies
 
-    # Flat-line: all values identical (stuck sensor)
+    # Flat-line: all values identical (stuck sensor).
+    # Skip expected steady-state values to avoid false positives:
+    #   • SOC at 100 %  → battery simply fully charged, not stuck
+    #   • SOC at 0 %    → battery empty or disconnected, not a sensor fault
+    #   • power/energy at 0 with only a handful of points → likely no production
+    #     (e.g. night-time solar) rather than a stuck sensor; need ≥ 6 samples
+    #     before calling it stuck so a single overnight state doesn't fire this
     if len(set(values)) == 1:
-        anomalies.append(f"{sensor.name}: constant value {values[0]} {sensor.unit} — sensor may be stuck")
+        v = values[0]
+        is_soc_edge   = sensor.role == "soc" and v in (0.0, 100.0)
+        is_zero_short = v == 0.0 and len(values) < 6
+        if not is_soc_edge and not is_zero_short:
+            anomalies.append(
+                f"{sensor.name}: constant value {v} {sensor.unit} — sensor may be stuck"
+            )
         return anomalies
 
     # SOC spike (battery went from low to full instantly)
@@ -271,6 +283,15 @@ async def fetch_history_bundles(
             else:
                 stats = _compute_stats(numeric_values)
                 anomalies = _detect_anomalies(sensor, numeric_values, stats) if stats else []
+
+            _LOGGER.debug(
+                "%s: %d raw → %d resampled pts, stats=%s, anomalies=%s",
+                sensor.entity_id,
+                len(points),
+                len(resampled),
+                f"min={stats.min:.2f} max={stats.max:.2f} mean={stats.mean:.2f}" if stats else "none",
+                anomalies or "none",
+            )
 
             bundles.append(
                 SensorHistoryBundle(
