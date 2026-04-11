@@ -147,7 +147,7 @@ async def fetch_history_bundles(
             start_time,
             end_time,
             entity_ids=all_entity_ids,
-            significant_changes_only=True,
+            significant_changes_only=False,  # False = all recorded changes, not just "significant" ones
             minimal_response=True,
         )
 
