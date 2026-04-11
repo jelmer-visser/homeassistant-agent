@@ -47,7 +47,8 @@ Response schema (strict):
       "title": "<short title>",
       "description": "<actionable description>",
       "estimated_saving": "<e.g. €2-5/month or empty string>",
-      "automation_yaml": "<HA automation YAML or empty string>"
+      "automation_yaml": "<HA automation YAML or empty string>",
+      "reasoning": "<1-2 sentences citing the specific sensor values or patterns that triggered this tip>"
     }
   ],
   "automations": [

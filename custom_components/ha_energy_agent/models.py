@@ -107,6 +107,7 @@ class AnalysisTip(BaseModel):
     description: str
     estimated_saving: str = ""
     automation_yaml: str = ""
+    reasoning: str = ""         # Which data points triggered this tip
 
 
 class AutomationSuggestion(BaseModel):

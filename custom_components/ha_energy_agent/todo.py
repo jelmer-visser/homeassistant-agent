@@ -54,6 +54,8 @@ def _tip_to_item(tip: AnalysisTip, completed_uids: set[str]) -> TodoItem:
     summary = f"{icon} {tip.title}".strip()
 
     desc_parts = [tip.description]
+    if tip.reasoning:
+        desc_parts.append(f"📊 Why: {tip.reasoning}")
     if tip.estimated_saving:
         desc_parts.append(f"Estimated saving: {tip.estimated_saving}")
     desc_parts.append(f"Category: {tip.category} · Priority: {tip.priority}")
