@@ -51,18 +51,27 @@ async def async_setup_frontend(hass: "HomeAssistant") -> None:
             await resources.async_load()
 
             base_url = f"{_STATIC_PATH}/{_CARD_JS}"
-            already_registered = any(
-                item.get("url", "").startswith(base_url)
-                for item in resources.async_items()
+            existing = next(
+                (item for item in resources.async_items()
+                 if item.get("url", "").startswith(base_url)),
+                None,
             )
 
-            if not already_registered:
+            if existing is None:
                 await resources.async_create_item(
                     {"res_type": "module", "url": _RESOURCE_URL}
                 )
                 _LOGGER.info("Registered Lovelace resource: %s", _RESOURCE_URL)
+            elif existing.get("url") != _RESOURCE_URL:
+                # Version changed — update the URL so browsers pick up the new JS.
+                await resources.async_update_item(
+                    existing["id"], {"res_type": "module", "url": _RESOURCE_URL}
+                )
+                _LOGGER.info(
+                    "Updated Lovelace resource: %s → %s", existing.get("url"), _RESOURCE_URL
+                )
             else:
-                _LOGGER.debug("Lovelace resource already registered: %s", base_url)
+                _LOGGER.debug("Lovelace resource up to date: %s", _RESOURCE_URL)
 
         except Exception as exc:  # noqa: BLE001
             _LOGGER.warning("Could not register Lovelace resource: %s", exc)
