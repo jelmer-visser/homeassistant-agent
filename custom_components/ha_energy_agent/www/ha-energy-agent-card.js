@@ -3,7 +3,7 @@
  * Add to a dashboard with:  type: custom:ha-energy-agent-card
  */
 
-const CARD_VERSION = "2.0.0";
+const CARD_VERSION = "2.1.0";
 
 const ENTITY = {
   score:    "sensor.ha_energy_agent_efficiency_score",
@@ -58,9 +58,11 @@ class HaEnergyAgentCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this._hass      = null;
-    this._config    = {};
-    this._expanded  = false;
+    this._hass        = null;
+    this._config      = {};
+    this._expanded    = false;
+    this._openTips    = new Set();   // indices of expanded tip rows
+    this._lastStamp   = null;        // last rendered state fingerprint
   }
 
   setConfig(config) {
@@ -69,6 +71,19 @@ class HaEnergyAgentCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+
+    // Only re-render when something we actually display has changed.
+    const stamp = [
+      hass.states[ENTITY.score]?.state,
+      hass.states[ENTITY.last]?.state,
+      hass.states[ENTITY.tips]?.state,
+      hass.states[ENTITY.tips]?.attributes?.tips?.length,
+      hass.states[ENTITY.highPrio]?.state,
+    ].join("|");
+
+    if (stamp === this._lastStamp) return;
+    this._lastStamp = stamp;
+
     this._render();
   }
 
@@ -104,14 +119,15 @@ class HaEnergyAgentCard extends HTMLElement {
       const pColor = PRIORITY_COLOR[t.priority] || "var(--primary-text-color)";
       const saving = t.estimated_saving ? `<span class="tip-saving">💰 ${t.estimated_saving}</span>` : "";
       const why    = t.reasoning ? `<div class="tip-why">📊 ${t.reasoning}</div>` : "";
+      const open   = this._openTips.has(i);
       return `
         <div class="tip-item" data-idx="${i}">
           <div class="tip-header" data-idx="${i}">
             <span class="tip-icon">${pIcon}</span>
             <span class="tip-title">${t.title}</span>
-            <ha-icon icon="mdi:chevron-down" class="tip-chevron" data-idx="${i}" style="--mdc-icon-size:18px;color:var(--secondary-text-color);flex-shrink:0;transition:transform .2s"></ha-icon>
+            <ha-icon icon="mdi:chevron-down" class="tip-chevron" data-idx="${i}" style="--mdc-icon-size:18px;color:var(--secondary-text-color);flex-shrink:0;transition:transform .2s;${open ? "transform:rotate(180deg)" : ""}"></ha-icon>
           </div>
-          <div class="tip-body" id="tip-body-${i}" style="display:none">
+          <div class="tip-body" id="tip-body-${i}" style="${open ? "" : "display:none"}">
             <div class="tip-desc">${t.description}</div>
             ${why}
             ${saving}
@@ -234,15 +250,17 @@ class HaEnergyAgentCard extends HTMLElement {
       chevron.icon          = this._expanded ? "mdi:chevron-up" : "mdi:chevron-down";
     });
 
-    // Toggle individual tips
+    // Toggle individual tips — persist open state so re-renders don't collapse them
     this.shadowRoot.querySelectorAll(".tip-header").forEach(el => {
       el.addEventListener("click", () => {
-        const idx  = el.dataset.idx;
+        const idx  = parseInt(el.dataset.idx, 10);
         const body = this.shadowRoot.getElementById(`tip-body-${idx}`);
         const chev = el.querySelector(".tip-chevron");
         const open = body.style.display === "none";
         body.style.display = open ? "" : "none";
         if (chev) chev.style.transform = open ? "rotate(180deg)" : "";
+        if (open) this._openTips.add(idx);
+        else      this._openTips.delete(idx);
       });
     });
 

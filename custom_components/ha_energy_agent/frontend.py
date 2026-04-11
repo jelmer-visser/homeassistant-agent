@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 _CARD_JS = "ha-energy-agent-card.js"
-_CARD_VERSION = "4"  # Bump when the card JS changes to bust the browser cache
+_CARD_VERSION = "5"  # Bump when the card JS changes to bust the browser cache
 _STATIC_PATH = "/ha_energy_agent"
 _RESOURCE_URL = f"{_STATIC_PATH}/{_CARD_JS}?v={_CARD_VERSION}"
 _WWW_DIR = Path(__file__).parent / "www"
