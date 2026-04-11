@@ -30,6 +30,8 @@ _LOGGER = logging.getLogger(__name__)
 
 _DEFAULT_MAX_POINTS = 48
 _UNAVAILABLE = {"unavailable", "unknown", "none", ""}
+# If state-history returns fewer points than this, fall back to 5-minute statistics.
+_MIN_POINTS_THRESHOLD = 5
 
 
 def _parse_numeric(value: str) -> Optional[float]:
@@ -105,6 +107,45 @@ def _detect_anomalies(sensor: DiscoveredSensor, values: list[float], stats: Sens
             )
 
     return anomalies
+
+
+async def _fetch_stats_as_history_points(
+    hass: "HomeAssistant",
+    recorder,
+    entity_id: str,
+    start_time: datetime,
+    end_time: datetime,
+) -> list[HistoryPoint]:
+    """Fetch 5-minute statistics as HistoryPoint objects.
+
+    Used as a fallback when get_significant_states returns very few points —
+    which happens for "5-minute aggregated" sensors (e.g. Zendure battery) that
+    store data in the statistics table rather than the state history table.
+    """
+    from homeassistant.components.recorder.statistics import statistics_during_period
+
+    def _fetch():
+        return statistics_during_period(
+            hass, start_time, end_time,
+            {entity_id}, "5minute", None,
+            {"mean"},
+        )
+
+    try:
+        data = await recorder.async_add_executor_job(_fetch)
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.debug("Stats fallback failed for %s: %s", entity_id, exc)
+        return []
+
+    points: list[HistoryPoint] = []
+    for row in data.get(entity_id, []):
+        mean = row.get("mean")
+        if mean is None:
+            continue
+        ts = datetime.fromtimestamp(row["start"], tz=timezone.utc)
+        points.append(HistoryPoint(ts=ts, value=mean))
+
+    return points
 
 
 async def fetch_history_bundles(
@@ -185,14 +226,31 @@ async def fetch_history_bundles(
                     ts = ts.replace(tzinfo=timezone.utc)
                 points.append(HistoryPoint(ts=ts, value=val))
 
+            # Sparse-sensor fallback: statistics-based sensors (e.g. Zendure battery)
+            # store data only in the statistics table, not in state history.
+            # get_significant_states returns ≤ 1 point for them; fall back to
+            # 5-minute statistics rows which give a proper time series.
+            if len(points) < _MIN_POINTS_THRESHOLD:
+                stats_points = await _fetch_stats_as_history_points(
+                    hass, recorder, sensor.entity_id, start_time, end_time
+                )
+                if len(stats_points) > len(points):
+                    _LOGGER.debug(
+                        "%s: state history had %d points; using %d points from 5-min statistics",
+                        sensor.entity_id, len(points), len(stats_points),
+                    )
+                    points = stats_points
+
             resampled = _resample(points, max_points)
             numeric_values = [p.value for p in resampled]
 
-            # For efficiency sensors (COP etc.) a value of 0 means the device
-            # is off, not a real efficiency reading. Compute stats on active
-            # (non-zero) samples only; add an informational note about duty cycle.
+            # For efficiency sensors (COP etc.):
+            #  • value == 0  → device idle, not a real reading
+            #  • value < 0   → sensor artifact (e.g. defrost-cycle glitch); physically impossible
+            # Compute stats on active valid samples only; annotate both cases.
             if sensor.role == "efficiency":
-                active_values = [v for v in numeric_values if v > 0]
+                active_values  = [v for v in numeric_values if v > 0]
+                artifact_count = sum(1 for v in numeric_values if v < 0)
                 idle_pct = (
                     round(100 * (len(numeric_values) - len(active_values)) / len(numeric_values))
                     if numeric_values else 0
@@ -205,6 +263,11 @@ async def fetch_history_bundles(
                         f"{idle_pct}% of the window; stats reflect active periods only"
                     )
                     anomalies.insert(0, note)
+                if artifact_count:
+                    anomalies.insert(0, (
+                        f"{sensor.name}: {artifact_count} negative COP reading(s) detected "
+                        f"— sensor artifact (likely defrost cycle), excluded from stats"
+                    ))
             else:
                 stats = _compute_stats(numeric_values)
                 anomalies = _detect_anomalies(sensor, numeric_values, stats) if stats else []

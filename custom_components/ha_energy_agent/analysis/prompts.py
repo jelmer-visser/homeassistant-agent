@@ -31,6 +31,7 @@ Guidelines:
 - Provide realistic estimated savings in EUR where possible.
 - When you suggest a Home Assistant automation, output valid YAML.
 - Acknowledge data gaps honestly; do not fabricate readings.
+- COP/efficiency sensors often report 0 when the device is idle and occasionally spike negative (defrost-cycle artefacts). Treat negative COP values as invalid sensor noise — never cite them as real efficiency readings or use them in averages. When the long-term context flags excluded artefact months, trust the exclusion and report the valid months only.
 - You receive both fine-grained recent data (last 24–48h) and long-term aggregates (daily last 30 days, monthly last 12 months). Use seasonal and weekly patterns to inform your efficiency score and tips.
 - Keep the summary concise (2–4 sentences) and conversational.
 - Return ONLY valid JSON matching the schema below — no prose outside the JSON.
@@ -144,6 +145,18 @@ def _long_term_section(ctx: LongTermContext) -> str:
                     return f"{a.date}=?"
                 pairs = ", ".join(_energy_val(a) for a in recent)
                 lines.append(f"  Daily (last 7d): {pairs}")
+            elif b.role == "efficiency":
+                # Negative daily means are sensor artifacts (e.g. defrost-cycle glitches).
+                # Exclude them and flag so the AI does not treat them as real COP drops.
+                valid  = [(a.date, a.mean) for a in recent if a.mean is not None and a.mean >= 0]
+                skipped = sum(1 for a in recent if a.mean is not None and a.mean < 0)
+                pairs = ", ".join(f"{d}={m:.1f}" for d, m in valid) if valid else "no valid data"
+                artifact_note = (
+                    f" [WARNING: {skipped} day(s) had negative mean — pre-aggregated artifact "
+                    f"from defrost-cycle spikes, excluded; do NOT cite these as real COP values]"
+                    if skipped else ""
+                )
+                lines.append(f"  Daily mean active COP (last 7d): {pairs}{artifact_note}")
             elif b.role in ("power", "power_net", "soc", "temperature"):
                 pairs = ", ".join(
                     f"{a.date}={a.mean:.1f}" if a.mean is not None else f"{a.date}=?"
@@ -161,12 +174,24 @@ def _long_term_section(ctx: LongTermContext) -> str:
                         return f"{a.date}={a.max:.0f}kWh (peak)"
                     return f"{a.date}=?"
                 pairs = ", ".join(_energy_val_m(a) for a in b.monthly)
+                lines.append(f"  Monthly: {pairs}")
+            elif b.role == "efficiency":
+                # Same artifact filtering for monthly aggregates.
+                valid_m   = [(a.date, a.mean) for a in b.monthly if a.mean is not None and a.mean >= 0]
+                skipped_m = sum(1 for a in b.monthly if a.mean is not None and a.mean < 0)
+                pairs = ", ".join(f"{d}={m:.1f}" for d, m in valid_m) if valid_m else "no valid data"
+                artifact_note = (
+                    f" [WARNING: {skipped_m} month(s) excluded — pre-aggregated mean skewed by "
+                    f"negative defrost-cycle spikes; actual active COP was higher]"
+                    if skipped_m else ""
+                )
+                lines.append(f"  Monthly active COP: {pairs}{artifact_note}")
             else:
                 pairs = ", ".join(
                     f"{a.date}={a.mean:.1f}" if a.mean is not None else f"{a.date}=?"
                     for a in b.monthly
                 )
-            lines.append(f"  Monthly: {pairs}")
+                lines.append(f"  Monthly: {pairs}")
 
     return "\n".join(lines)
 
