@@ -20,7 +20,6 @@ from homeassistant.components.todo import (
     TodoListEntityFeature,
 )
 from homeassistant.helpers.storage import Store
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.ha_energy_agent.const import DOMAIN
 from custom_components.ha_energy_agent.models import AnalysisTip
@@ -74,12 +73,20 @@ def _tip_to_item(tip: AnalysisTip, completed_uids: set[str]) -> TodoItem:
     )
 
 
-class EnergyTipsTodoList(CoordinatorEntity["EnergyAgentCoordinator"], TodoListEntity):
-    """A todo list that surfaces AI energy tips and lets users act on them."""
+class EnergyTipsTodoList(TodoListEntity):
+    """A todo list that surfaces AI energy tips and lets users act on them.
+
+    Deliberately does NOT inherit CoordinatorEntity — that base class controls
+    the `available` property via coordinator.last_update_success, which caused
+    the entity to go unavailable whenever an AI API call failed. Instead we
+    subscribe to coordinator updates manually and stay always-available because
+    tips are persisted to storage independently of API health.
+    """
 
     _attr_has_entity_name = True
     _attr_name = "Energy Tips"
     _attr_icon = "mdi:lightbulb-group"
+    _attr_should_poll = False
     _attr_supported_features = (
         TodoListEntityFeature.UPDATE_TODO_ITEM
         | TodoListEntityFeature.DELETE_TODO_ITEM
@@ -90,7 +97,7 @@ class EnergyTipsTodoList(CoordinatorEntity["EnergyAgentCoordinator"], TodoListEn
         coordinator: "EnergyAgentCoordinator",
         entry: "ConfigEntry",
     ) -> None:
-        super().__init__(coordinator)
+        self._coordinator = coordinator
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_energy_tips"
         self._items: list[TodoItem] = []
@@ -106,35 +113,44 @@ class EnergyTipsTodoList(CoordinatorEntity["EnergyAgentCoordinator"], TodoListEn
     # Entity lifecycle
     # ------------------------------------------------------------------
 
+    @property
+    def device_info(self) -> dict:
+        return {
+            "identifiers": {(DOMAIN, self._entry.entry_id)},
+            "name": "HA Energy Agent",
+            "manufacturer": "Anthropic / Claude",
+            "model": "Energy Optimization AI",
+            "entry_type": "service",
+        }
+
     async def async_added_to_hass(self) -> None:
-        """Restore persisted state before first coordinator update."""
+        """Subscribe to coordinator updates and restore persisted state."""
         await super().async_added_to_hass()
+
+        # Restore tips from storage so the list is populated immediately on restart.
         await self._load_from_store()
-        # Sync immediately if coordinator already has data
-        if self.coordinator.data:
-            self._sync_tips(self.coordinator.data.analysis.tips)
-        # Always write state after restoring from store so the entity isn't
-        # stuck as unavailable from a previous failed cycle.
+
+        # Sync from coordinator if it already has data (e.g. after reload).
+        if self._coordinator.data:
+            self._sync_tips(self._coordinator.data.analysis.tips)
+
+        # Subscribe to future coordinator refreshes.
+        self.async_on_remove(
+            self._coordinator.async_add_listener(self._on_coordinator_update)
+        )
+
+        # Write state now — entity is always available.
         self.async_write_ha_state()
 
     # ------------------------------------------------------------------
-    # Availability — always True; tips are persisted so the list is
-    # always usable even when the coordinator (AI API) is offline.
+    # Coordinator listener
     # ------------------------------------------------------------------
 
-    @property
-    def available(self) -> bool:
-        return True
-
-    # ------------------------------------------------------------------
-    # CoordinatorEntity hook
-    # ------------------------------------------------------------------
-
-    def _handle_coordinator_update(self) -> None:
-        """Called on each coordinator refresh — sync tips into the list."""
-        if self.coordinator.data:
+    def _on_coordinator_update(self) -> None:
+        """Called after each coordinator refresh."""
+        if self._coordinator.data:
             try:
-                self._sync_tips(self.coordinator.data.analysis.tips)
+                self._sync_tips(self._coordinator.data.analysis.tips)
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("Error syncing tips from coordinator data")
         self.async_write_ha_state()
@@ -155,7 +171,6 @@ class EnergyTipsTodoList(CoordinatorEntity["EnergyAgentCoordinator"], TodoListEn
         else:
             self._completed_uids.discard(uid)
 
-        # Update in-place
         for i, existing in enumerate(self._items):
             if existing.uid == uid:
                 self._items[i] = TodoItem(
@@ -186,15 +201,12 @@ class EnergyTipsTodoList(CoordinatorEntity["EnergyAgentCoordinator"], TodoListEn
         """Merge new AI tips into the list, respecting completed/dismissed state."""
         new_uids = {tip.id for tip in tips}
 
-        # Remove completed_uids for tips the AI no longer suggests
+        # Drop completed/dismissed UIDs for tips the AI no longer returns.
         self._completed_uids &= new_uids
-
-        # Remove dismissed tips that the AI stopped suggesting — clean the slate
         self._dismissed_uids &= new_uids
 
-        # Build new item list (skip dismissed tips; show completed ones at bottom)
-        needs_action = []
-        completed = []
+        needs_action: list[TodoItem] = []
+        completed: list[TodoItem] = []
         for tip in tips:
             if tip.id in self._dismissed_uids:
                 continue
@@ -204,7 +216,6 @@ class EnergyTipsTodoList(CoordinatorEntity["EnergyAgentCoordinator"], TodoListEn
             else:
                 needs_action.append(item)
 
-        # High priority first within each group
         priority_order = {"high": 0, "medium": 1, "low": 2}
         needs_action.sort(key=lambda i: _tip_priority(i.uid, tips, priority_order))
         completed.sort(key=lambda i: _tip_priority(i.uid, tips, priority_order))
@@ -221,14 +232,16 @@ class EnergyTipsTodoList(CoordinatorEntity["EnergyAgentCoordinator"], TodoListEn
             return
         self._completed_uids = set(data.get("completed_uids", []))
         self._dismissed_uids = set(data.get("dismissed_uids", []))
-        # Restore last known items so the list isn't empty until next analysis
         self._items = [
             TodoItem(
                 uid=d["uid"],
                 summary=d["summary"],
                 description=d.get("description", ""),
-                status=TodoItemStatus.COMPLETED if d["uid"] in self._completed_uids
-                else TodoItemStatus.NEEDS_ACTION,
+                status=(
+                    TodoItemStatus.COMPLETED
+                    if d["uid"] in self._completed_uids
+                    else TodoItemStatus.NEEDS_ACTION
+                ),
             )
             for d in data.get("items", [])
             if d["uid"] not in self._dismissed_uids
